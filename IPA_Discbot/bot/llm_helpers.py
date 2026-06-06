@@ -38,12 +38,22 @@ def _build_transcript(context_messages: list[dict]) -> str:
 
 def _conversation_system_prompt() -> str:
     return (
-        "You are a helpful planning assistant inside Discord. "
-        "Keep answers concise. "
+        "You are an expert PDDL Knowledge Engineer and planning assistant inside Discord. "
+        "Your goal is to help users conceptualize, design, and validate automated planning models. "
+        "Keep answers concise and use Markdown for easy reading on Discord. "
         "You are given persisted conversation history for this user, and that history can include previous bot sessions. "
         "Use facts, variables, preferences, and prior commitments from the provided history when answering. "
         "If the needed information appears in the provided history, do not say you cannot access previous sessions or that memory was lost after a restart. "
-        "Only say information is unavailable when it truly does not appear in the supplied conversation history."
+        "Only say information is unavailable when it truly does not appear in the supplied conversation history.\n\n"
+        "CRITICAL INSTRUCTION: Do NOT generate complete PDDL domain or problem code files. "
+        "Instead, help the user understand the model by generating structured natural language outlines (e.g., bulleted lists). "
+        "Break down planning scenarios into readable components: Types, Predicates, Actions (with detailed Preconditions and Effects), Objects, Initial State, and Goals.\n\n"
+        "When evaluating or outlining a planning model, thoroughly evaluate the user's logic using this semantic checklist and share your recommendations:\n"
+        "1. Types & Objects: Are entities logically grouped and abstracted correctly?\n"
+        "2. Predicates: Are all necessary state variables and arities represented? Are there redundancies?\n"
+        "3. Actions: Are preconditions strict enough to prevent invalid states? Do effects properly track state transitions without frame problem violations?\n"
+        "4. Problem State: Is the initial state complete? Is the goal formulation reachable and well-defined?\n\n"
+        "Provide proactive recommendations on modeling choices (e.g., simplifying action parameters, utilizing constants, or addressing state-space explosion) to guide the user toward a robust formalization."
     )
 
 
@@ -195,8 +205,8 @@ def _to_pddl_identifier(value: str, default: str) -> str:
 def _fallback_natural_language_solve_system_prompt() -> str:
     return (
         "Return only valid JSON with keys "
-        "`domain_name`, `problem_name`, `action_name`, `domain_update`, and `task_update`. "
-        "Use `domain_update` and `task_update` in the exact heading/block format expected by the planning server."
+        "`domain_name`, `problem_name`, `domain_update`, and `task_update`. "
+        "Use `domain_update` and `task_update` in the exact XML-tagged JSON format expected by the planning server."
     )
 
 
@@ -223,7 +233,6 @@ async def _natural_language_solve_system_prompt() -> str:
         "You convert a user's natural-language planning request into two planning-server updates. "
         "Return only valid JSON with this schema: "
         "{\"domain_name\":\"snake_case_name\",\"problem_name\":\"snake_case_name\","
-        "\"action_name\":[\"snake_case_action\"],"
         "\"domain_update\":\"text formatted for update_domain\","
         "\"task_update\":\"text formatted for update_task\"}. "
         "Split the user's request into domain rules/operators and task-specific objects, initial state, and goal. "
@@ -251,7 +260,9 @@ PROVIDER_ENV = {
     "openai": "OPENAI_API_KEY",
     "gemini": "LLM_GEMINI_KEY",
     "anthropic": "ANTHROPIC_API_KEY",
-    "ollama": None,
+    "deepseek": "DEEPSEEK_API_KEY",
+    "mistral": "MISTRAL_API_KEY",
+    "ollama": "OLLAMA_API_KEY"
 }
 
 
@@ -263,6 +274,10 @@ def _provider_from_model_id(model_id: str) -> str | None:
         return "anthropic"
     if "gemini" in mid:
         return "gemini"
+    if "deepseek" in mid:
+        return "deepseek"
+    if "mistral" in mid:
+        return "mistral"
     return "openai"
 
 
@@ -377,22 +392,9 @@ async def _request_llm_json(message: discord.Message, prompt: str, system_prompt
 
 
 def _normalize_server_update_payload(data: dict) -> dict:
-    action_name = data.get("action_name")
-    if isinstance(action_name, str):
-        normalized_action_name: str | list[str] | None = _to_pddl_identifier(action_name, "action")
-    elif isinstance(action_name, list):
-        normalized_action_name = [
-            _to_pddl_identifier(str(item), f"action_{index}")
-            for index, item in enumerate(action_name, start=1)
-            if str(item).strip()
-        ]
-    else:
-        normalized_action_name = None
-
     return {
         "domain_name": _to_pddl_identifier(str(data.get("domain_name", "")).strip(), "generated_domain"),
         "problem_name": _to_pddl_identifier(str(data.get("problem_name", "")).strip(), "generated_problem"),
-        "action_name": normalized_action_name,
         "domain_update": str(data.get("domain_update", "")).strip(),
         "task_update": str(data.get("task_update", "")).strip(),
     }
@@ -403,7 +405,7 @@ async def _llm_plan_from_natural_language(
 ) -> dict:
     prompt = (
         "Convert this planning request into one domain update and one problem update for the local MCP planning server.\n"
-        "Return only JSON with keys domain_name, problem_name, action_name, domain_update, and task_update.\n"
+        "Return only JSON with keys domain_name, problem_name, domain_update, and task_update.\n"
         f"Original request: {json.dumps(request_text)}"
     )
     if feedback:
@@ -522,8 +524,8 @@ async def _edit_domain_system_prompt() -> str:
         tool_catalog = await get_mcp_tool_catalog()
     except Exception:
         return (
-            "Return only valid JSON with keys `domain_name`, `action_name`, and `domain_update`. "
-            "Use `domain_update` in the exact heading/block format expected by update_domain."
+            "Return only valid JSON with keys `domain_name` and `domain_update`. "
+            "Use `domain_update` in the exact XML-tagged JSON format expected by update_domain."
         )
 
     l2p_tools = {
@@ -534,8 +536,8 @@ async def _edit_domain_system_prompt() -> str:
     ).strip()
     if not domain_description:
         return (
-            "Return only valid JSON with keys `domain_name`, `action_name`, and `domain_update`. "
-            "Use `domain_update` in the exact heading/block format expected by update_domain."
+            "Return only valid JSON with keys `domain_name` and `domain_update`. "
+            "Use `domain_update` in the exact XML-tagged JSON format expected by update_domain."
         )
 
     return (
@@ -543,7 +545,7 @@ async def _edit_domain_system_prompt() -> str:
         "Preserve the user's original intent and keep changes minimal. "
         "Do not rewrite unrelated parts of the domain. "
         "Return only valid JSON with this schema: "
-        "{\"domain_name\":\"snake_case_name\",\"action_name\":[\"snake_case_action\"],"
+        "{\"domain_name\":\"snake_case_name\","
         "\"domain_update\":\"text formatted for update_domain\"}. "
         "The `domain_update` field must follow the `update_domain` tool description exactly:\n"
         f"{domain_description}\n\n"
@@ -557,7 +559,7 @@ async def _edit_problem_system_prompt() -> str:
     except Exception:
         return (
             "Return only valid JSON with keys `domain_name`, `problem_name`, and `task_update`. "
-            "Use `task_update` in the exact heading/block format expected by update_task."
+            "Use `task_update` in the exact XML-tagged JSON format expected by update_task."
         )
 
     l2p_tools = {
@@ -569,7 +571,7 @@ async def _edit_problem_system_prompt() -> str:
     if not task_description:
         return (
             "Return only valid JSON with keys `domain_name`, `problem_name`, and `task_update`. "
-            "Use `task_update` in the exact heading/block format expected by update_task."
+            "Use `task_update` in the exact XML-tagged JSON format expected by update_task."
         )
 
     return (
@@ -596,7 +598,7 @@ async def _llm_domain_edit_from_instruction(
 ) -> dict:
     prompt = (
         "Revise this planning domain according to the user's instruction.\n"
-        "Return only JSON with keys domain_name, action_name, and domain_update.\n"
+        "Return only JSON with keys domain_name and domain_update.\n"
         f"Current domain name: {json.dumps(domain_name)}\n"
         f"Edit instruction: {json.dumps(instruction)}\n"
         f"Current domain PDDL:\n{current_domain}"
@@ -611,10 +613,7 @@ async def _llm_domain_edit_from_instruction(
     normalized = _normalize_server_update_payload(
         {
             "domain_name": data.get("domain_name") or domain_name,
-            "problem_name": "unused_problem",
-            "action_name": data.get("action_name"),
             "domain_update": data.get("domain_update"),
-            "task_update": "unused",
         }
     )
     if not normalized["domain_update"]:
@@ -651,7 +650,6 @@ async def _llm_problem_edit_from_instruction(
         {
             "domain_name": data.get("domain_name") or domain_name,
             "problem_name": data.get("problem_name") or problem_name,
-            "action_name": None,
             "domain_update": "unused",
             "task_update": data.get("task_update"),
         }

@@ -165,7 +165,7 @@ def _format_help_message() -> str:
         "`!save` Save the current bot session so its conversation log is kept after restart.",
         "`/models` Show the available LLM model IDs you can choose from.",
         "`/use <model_id>` Set which model the bot should use for your requests.",
-        "`/setkey <provider> <api_key>` Save your provider API key for `openai`, `gemini`, or `anthropic`.",
+        "`/setkey <provider> <api_key>` Save your provider API key for `openai`, `gemini`, `deepseek`, `anthropic`, `mistral`, or `ollama`.",
     ]
     return "\n".join(lines)
 
@@ -266,22 +266,11 @@ async def _update_domain_with_fallback(
     *,
     domain_update: str,
     domain_name: str,
-    action_name: str | list[str] | None,
 ) -> dict[str, object]:
-    try:
-        return await update_domain_via_l2p(
-            domain_update=domain_update,
-            domain_name=domain_name,
-            action_name=action_name,
-        )
-    except RuntimeError as e:
-        message = str(e)
-        if "More action_name values were provided than action updates" not in message:
-            raise
-        return await update_domain_via_l2p(
-            domain_update=domain_update,
-            domain_name=domain_name,
-        )
+    return await update_domain_via_l2p(
+        domain_update=domain_update,
+        domain_name=domain_name,
+    )
 
 
 async def _run_plan_request(
@@ -335,7 +324,6 @@ async def _run_plan_request(
                 problem_name = str(llm_plan.get("problem_name", "")).strip()
                 domain_update = str(llm_plan.get("domain_update", "")).strip()
                 task_update = str(llm_plan.get("task_update", "")).strip()
-                action_name = llm_plan.get("action_name")
 
                 if not domain_name or not problem_name or not domain_update or not task_update:
                     raise RuntimeError("The model did not return a complete domain/task update payload.")
@@ -344,7 +332,6 @@ async def _run_plan_request(
                     domain_payload = await _update_domain_with_fallback(
                         domain_update=domain_update,
                         domain_name=domain_name,
-                        action_name=action_name,
                     )
                     task_payload = await update_task_via_l2p(
                         task_update=task_update,
@@ -401,7 +388,6 @@ async def _run_domain_request(message: discord.Message, request_text: str) -> tu
         )
         domain_name = str(llm_plan.get("domain_name", "")).strip()
         domain_update = str(llm_plan.get("domain_update", "")).strip()
-        action_name = llm_plan.get("action_name")
 
         if not domain_name or not domain_update:
             raise RuntimeError("The model did not return a complete domain update payload.")
@@ -410,7 +396,6 @@ async def _run_domain_request(message: discord.Message, request_text: str) -> tu
             domain_payload = await _update_domain_with_fallback(
                 domain_update=domain_update,
                 domain_name=domain_name,
-                action_name=action_name,
             )
         except RuntimeError as e:
             retry_feedback = str(e)
@@ -603,7 +588,6 @@ async def _run_autovalidate_request(
                 domain_payload = await _update_domain_with_fallback(
                     domain_update=str(domain_edit.get("domain_update", "")).strip(),
                     domain_name=str(domain_edit.get("domain_name", domain_name)).strip() or domain_name,
-                    action_name=domain_edit.get("action_name"),
                 )
                 task_payload = await update_task_via_l2p(
                     task_update=str(problem_edit.get("task_update", "")).strip(),
@@ -1143,12 +1127,12 @@ async def use_cmd(interaction: discord.Interaction, model_id: str):
 
 
 @bot.tree.command(name="setkey", description="Set your API key for a provider")
-@app_commands.describe(provider="openai | gemini | anthropic", api_key="Your API key")
+@app_commands.describe(provider="openai | gemini | anthropic | deepseek | mistral | ollama", api_key="Your API key")
 async def setkey_cmd(interaction: discord.Interaction, provider: str, api_key: str):
     provider = provider.strip().lower()
-    if provider not in ("openai", "gemini", "anthropic"):
+    if provider not in ("openai", "gemini", "anthropic", "deepseek", "mistral", "ollama"):
         await interaction.response.send_message(
-            "Unknown provider. Use: openai | gemini | anthropic",
+            "Unknown provider. Use: openai | gemini | anthropic | deepseek | mistral | ollama",
             ephemeral=True,
         )
         return

@@ -112,9 +112,7 @@ async def update_domain_via_l2p(
     domain_update_path: str | None = None,
     domain: dict[str, Any] | None = None,
     domain_name: str | None = None,
-    action_name: str | list[str] | None = None,
     replace_fields: list[str] | None = None,
-    use_type_hierarchy: bool = False,
     infer_requirements: bool = True,
 ) -> dict[str, Any]:
     result = await call_mcp_tool(
@@ -126,9 +124,7 @@ async def update_domain_via_l2p(
                 "domain_update_path": domain_update_path,
                 "domain": domain,
                 "domain_name": domain_name,
-                "action_name": action_name,
                 "replace_fields": replace_fields,
-                "use_type_hierarchy": use_type_hierarchy,
                 "infer_requirements": infer_requirements,
             }
         ),
@@ -144,7 +140,6 @@ async def update_task_via_l2p(
     domain_name: str | None = None,
     problem_name: str | None = None,
     replace_fields: list[str] | None = None,
-    metric: str | None = None,
 ) -> dict[str, Any]:
     result = await call_mcp_tool(
         "l2p",
@@ -157,7 +152,6 @@ async def update_task_via_l2p(
                 "domain_name": domain_name,
                 "problem_name": problem_name,
                 "replace_fields": replace_fields,
-                "metric": metric,
             }
         ),
     )
