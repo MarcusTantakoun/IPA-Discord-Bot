@@ -817,10 +817,13 @@ async def _handle_workflow_request(message: discord.Message) -> bool:
             )
             return True
 
+        collab_enabled = is_collab_enabled(str(message.channel.id))
+        log_message(message.channel.id, message.author.id, "user", _shared_log_content(message) if collab_enabled else text, message.guild.id if message.guild else None)
         messages = _split_discord_message(reply_text)
         await message.reply(messages[0], files=files or None, mention_author=False)
         for chunk in messages[1:]:
             await message.channel.send(chunk)
+        log_message(message.channel.id, message.author.id, "assistant", reply_text, message.guild.id if message.guild else None)
         return True
 
     try:
@@ -889,14 +892,19 @@ async def _handle_workflow_request(message: discord.Message) -> bool:
             )
             return True
 
+    collab_enabled = is_collab_enabled(str(message.channel.id))
+    log_message(message.channel.id, message.author.id, "user", _shared_log_content(message) if collab_enabled else text, message.guild.id if message.guild else None)
+
     if files:
         await message.reply(_truncate_discord_message(reply_text), files=files, mention_author=False)
+        log_message(message.channel.id, message.author.id, "assistant", reply_text, message.guild.id if message.guild else None)
         return True
 
     messages = _split_discord_message(reply_text)
     await message.reply(messages[0], mention_author=False)
     for chunk in messages[1:]:
         await message.channel.send(chunk)
+    log_message(message.channel.id, message.author.id, "assistant", reply_text, message.guild.id if message.guild else None)
     return True
 async def _handle_member_confirmation_response(message: discord.Message) -> bool:
     key = (message.channel.id, message.author.id)
