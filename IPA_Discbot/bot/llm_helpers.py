@@ -781,6 +781,65 @@ async def _llm_plan_edit_from_instruction(
     return plan_text
 
 
+async def _llm_audit_domain(
+    message: discord.Message,
+    domain_text: str,
+) -> str:
+    prompt = (
+        "Review this PDDL planning domain for common modeling bugs.\n"
+        "Check for: missing preconditions, asymmetric action effects, unreachable goals, and redundant predicates.\n"
+        "If you find issues, list each one briefly (one per line). "
+        "If no issues are found, respond with exactly: No issues found.\n"
+        f"Domain PDDL:\n{domain_text}"
+    )
+    system_prompt = (
+        "You audit PDDL planning domains for correctness. "
+        "Be concise and specific — name the action or predicate that has the problem. "
+        "Only flag genuine issues, not stylistic preferences."
+    )
+    selected_model = get_user_model(str(message.author.id)) or MODEL
+    return (
+        await asyncio.to_thread(
+            _run_llm_prompt_for_user_sync,
+            str(message.author.id),
+            selected_model,
+            prompt,
+            system_prompt,
+        )
+    ).strip()
+
+
+async def _llm_check_goal_reachability(
+    message: discord.Message,
+    domain_text: str,
+    problem_text: str,
+) -> str:
+    prompt = (
+        "Given this PDDL domain and problem, check whether the goal is reachable.\n"
+        "Consider: are there objects in the goal that are never introduced in the initial state? "
+        "Are there goal conditions that no action can establish? "
+        "Is the initial state missing facts that are required before any useful action can fire?\n"
+        "If you find potential issues, list each one briefly (one per line). "
+        "If everything looks reachable, respond with exactly: Goal appears reachable.\n"
+        f"Domain PDDL:\n{domain_text}\n\nProblem PDDL:\n{problem_text}"
+    )
+    system_prompt = (
+        "You do a lightweight semantic sanity check on PDDL planning problems. "
+        "Be concise and specific — name the predicate, object, or action that causes the issue. "
+        "This is not full verification; flag only obvious reachability problems."
+    )
+    selected_model = get_user_model(str(message.author.id)) or MODEL
+    return (
+        await asyncio.to_thread(
+            _run_llm_prompt_for_user_sync,
+            str(message.author.id),
+            selected_model,
+            prompt,
+            system_prompt,
+        )
+    ).strip()
+
+
 async def _llm_explain_artifact(
     message: discord.Message,
     artifact_type: str,

@@ -18,8 +18,11 @@ from IPA_Discbot.mcp_client import (
     validate_plan,
     validate_task,
 )
+
 from .llm_helpers import (
     _all_llm_model_ids,
+    _llm_audit_domain,
+    _llm_check_goal_reachability,
     _llm_classify_workflow_request,
     _llm_domain_pddl_edit_from_instruction,
     _llm_domain_edit_from_instruction,
@@ -130,7 +133,7 @@ def _format_help_message() -> str:
         "`!help` Show this help message with a short description of each command.",
         "",
         "Planning:",
-        "`!plan <request>` Solve a planning request from natural language, or attach domain/problem PDDL files with `!plan`.",
+        "`!plan <request>` Solve a planning request from natural language; VAL validation runs automatically on the result.",
         "`!plan` Re-solve using the current stored domain and problem in this channel for you.",
         "`!domain <request>` Generate a planning domain from a natural-language request and return the domain PDDL.",
         "`!problem <request>` Generate a planning problem from a natural-language request and return the problem PDDL.",
@@ -142,14 +145,14 @@ def _format_help_message() -> str:
         "`!edit <domain|problem|plan> <instruction>` Revise one current artifact while preserving the rest of the workflow state.",
         "`!undo <domain|problem>` Restore the previous version of one user-authored artifact.",
         "",
-        "Validation:",
-        "`!validate` Validate that a plan fits a domain and problem with VAL, using attachments or the last successful `!plan` output.",
+        "Quality Checks (automatic):",
+        "`!audit` Re-run the LLM domain audit on the current stored domain.",
+        "`!autovalidate` Loop domain/problem repairs against VAL until the current plan passes or the retry limit is reached.",
+        "",
+        "Advanced / Manual Validation:",
         "`!validate_domain` Validate a domain PDDL file with the PaaS domain validation tool.",
         "`!validate_task` Validate a domain/problem pair with the PaaS task validation tool.",
         "`!validate_plan` Validate a domain/problem/plan triple with the PaaS plan validation tool.",
-        "",
-        "Progress / Beta:",
-        "`!autovalidate` Beta: loop domain/problem repairs against VAL until the current plan passes or the retry limit is reached.",
         "",
         "MCP Tools:",
         "`!tools` List the MCP tools currently exposed by the connected planning servers.",
@@ -371,10 +374,24 @@ async def _run_plan_request(
             else:
                 raise RuntimeError(retry_feedback or "Failed to produce a valid plan.")
 
+    try:
+        val_result = await validate_plan_with_val(domain_text, problem_text, result)
+        val_valid = _val_output_indicates_valid(val_result)
+        val_section = (
+            "VAL: Plan is valid."
+            if val_valid
+            else f"VAL: Plan is invalid.\n```text\n{val_result.strip()}\n```"
+        )
+    except Exception:
+        val_section = ""
+
     _store_last_solve_artifacts(
         message, domain_text, problem_text, result, domain_name, problem_name
     )
-    return f"Generated planning artifacts.\n\nCurrent plan:\n```text\n{result.strip()}\n```", None
+    reply = f"Generated planning artifacts.\n\nCurrent plan:\n```text\n{result.strip()}\n```"
+    if val_section:
+        reply += f"\n\n{val_section}"
+    return reply, None
 
 
 async def _run_domain_request(message: discord.Message, request_text: str) -> tuple[str, str]:
@@ -417,6 +434,7 @@ async def _run_domain_request(message: discord.Message, request_text: str) -> tu
 
 
 async def _run_problem_request(message: discord.Message, request_text: str) -> tuple[str, str]:
+    stored_domain_name = str(_working_artifacts(message).get("domain_name", "")).strip()
     retry_feedback: str | None = None
     domain_name = ""
     problem_name = ""
@@ -426,7 +444,7 @@ async def _run_problem_request(message: discord.Message, request_text: str) -> t
         llm_plan = await _llm_plan_from_natural_language(
             message, request_text, retry_feedback
         )
-        domain_name = str(llm_plan.get("domain_name", "")).strip()
+        domain_name = stored_domain_name or str(llm_plan.get("domain_name", "")).strip()
         problem_name = str(llm_plan.get("problem_name", "")).strip()
         task_update = str(llm_plan.get("task_update", "")).strip()
 
@@ -477,15 +495,6 @@ async def _extract_current_plan_validation_inputs(
         return None
 
     return domain_text, problem_text, plan_text
-
-
-async def _run_validate_request(message: discord.Message) -> str:
-    inputs = await _extract_current_plan_validation_inputs(message)
-    if inputs is None:
-        return "Nothing to validate"
-    domain_text, problem_text, plan_text = inputs
-    result = await validate_plan_with_val(domain_text, problem_text, plan_text)
-    return _format_validation_result("plan", result or "VAL validation returned an empty response.")
 
 
 async def _run_validate_plan_request(message: discord.Message) -> str:
@@ -827,6 +836,12 @@ async def _handle_workflow_request(message: discord.Message) -> bool:
                 domain_name, domain_text = await _run_domain_request(message, text)
                 _update_working_artifacts(message, domain=domain_text, domain_name=domain_name)
                 reply_text = _format_domain_reply(domain_name, domain_text)
+                try:
+                    audit_text = await _llm_audit_domain(message, domain_text)
+                    if audit_text:
+                        reply_text += f"\n\nDomain audit:\n```text\n{audit_text}\n```"
+                except Exception:
+                    pass
                 files = None
             elif intent == "problem":
                 problem_name, problem_text = await _run_problem_request(message, text)
@@ -836,6 +851,14 @@ async def _handle_workflow_request(message: discord.Message) -> bool:
                     problem_name=problem_name,
                 )
                 reply_text = _format_problem_reply(problem_name, problem_text)
+                try:
+                    domain_text = _artifact_text(_working_artifacts(message), "domain")
+                    if domain_text:
+                        reach_text = await _llm_check_goal_reachability(message, domain_text, problem_text)
+                        if reach_text:
+                            reply_text += f"\n\nGoal reachability check:\n```text\n{reach_text}\n```"
+                except Exception:
+                    pass
                 files = None
             elif intent == "validate_plan":
                 reply_text = await _run_validate_plan_request(message)
@@ -1345,7 +1368,14 @@ async def domain_cmd(ctx: commands.Context, *, request: str | None = None):
                 _truncate_discord_message(f"Domain generation failed: {type(e).__name__}: {e}")
             )
             return
+        try:
+            audit_text = await _llm_audit_domain(ctx.message, domain_text)
+        except Exception:
+            audit_text = ""
+
     reply_text = _format_domain_reply(domain_name, domain_text)
+    if audit_text:
+        reply_text += f"\n\nDomain audit:\n```text\n{audit_text}\n```"
     messages = _split_discord_message(reply_text)
     await ctx.reply(messages[0])
     for chunk in messages[1:]:
@@ -1371,7 +1401,15 @@ async def problem_cmd(ctx: commands.Context, *, request: str | None = None):
                 _truncate_discord_message(f"Problem generation failed: {type(e).__name__}: {e}")
             )
             return
+        try:
+            domain_text = _artifact_text(_working_artifacts(ctx.message), "domain")
+            reach_text = await _llm_check_goal_reachability(ctx.message, domain_text, problem_text) if domain_text else ""
+        except Exception:
+            reach_text = ""
+
     reply_text = _format_problem_reply(problem_name, problem_text)
+    if reach_text:
+        reply_text += f"\n\nGoal reachability check:\n```text\n{reach_text}\n```"
     messages = _split_discord_message(reply_text)
     await ctx.reply(messages[0])
     for chunk in messages[1:]:
@@ -1495,18 +1533,25 @@ async def undo_cmd(ctx: commands.Context, artifact_type: str):
         await ctx.send(chunk)
 
 
-@bot.command(name="validate")
-async def validate_cmd(ctx: commands.Context):
+@bot.command(name="audit")
+async def audit_cmd(ctx: commands.Context):
+    current = _working_artifacts(ctx.message)
+    domain_text = _artifact_text(current, "domain")
+    if not domain_text:
+        await ctx.reply("No current domain to audit. Run `!domain` first.")
+        return
+
     async with ctx.typing():
         try:
-            result = await _run_validate_request(ctx.message)
+            result = await _llm_audit_domain(ctx.message, domain_text)
         except Exception as e:
             traceback.print_exc()
             await ctx.reply(
-                _truncate_discord_message(f"VAL validation failed: {type(e).__name__}: {e}")
+                _truncate_discord_message(f"Audit failed: {type(e).__name__}: {e}")
             )
             return
-    await ctx.reply(result)
+
+    await ctx.reply(_truncate_discord_message(f"Domain audit:\n```text\n{result}\n```"))
 
 
 @bot.command(name="validate_plan")

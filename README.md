@@ -15,6 +15,25 @@ The repo is organized around two main internal packages plus a small set of top-
 
 ## High-Level Architecture
 
+```
+Discord
+   │
+   ▼
+Bot layer (IPA_Discbot/bot/)
+   │  classifies messages, manages artifacts and conversation state
+   │
+   ├──► LLM  (user-selected model via /setkey and /use)
+   │         generates PDDL, audits domains, checks goal reachability
+   │
+   └──► MCP client (IPA_Discbot/mcp_client/)
+           │
+           ├──► L2P  (local Docker service)
+           │         converts natural-language updates into PDDL domain and problem files
+           │
+           └──► PaaS  (remote — solver.planning.domains)
+                       runs the planner and validates domains, tasks, and plans
+```
+
 At runtime, the flow is:
 
 1. The Discord bot starts from `IPA_Discbot.bot`.
@@ -79,12 +98,14 @@ Optional MCP endpoint overrides for running the bot directly on your host:
 
 ## MCP Layer
 
+MCP (Model Context Protocol) is a standard interface for connecting language models to external tools and services. In this project it is used as the transport layer between the bot and the two planning backends, so the bot can call solver and validation tools without being coupled to their internal APIs.
+
+The two backends are:
+
+- `paas` — Planning as a Service, a remote solver hosted at `solver.planning.domains`. It runs the planner against a PDDL domain and problem and returns a plan, and also exposes domain, task, and plan validation tools.
+- `l2p` — Language to Planning, a locally hosted Docker service. It takes natural-language descriptions of a planning domain or problem and converts them into valid PDDL, which the bot then passes to the solver.
+
 The `mcp_client/` package is the planning-service adapter for the bot. It hides MCP transport details, knows how to reach the configured planning backends, and turns backend responses into simpler values the bot can use.
-
-The current MCP-based backends are:
-
-- `paas` for planning solve requests
-- `l2p` for local planning-editing tools
 
 Its main responsibilities are:
 
