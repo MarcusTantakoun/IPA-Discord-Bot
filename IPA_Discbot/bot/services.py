@@ -1366,7 +1366,10 @@ async def plan_cmd(ctx: commands.Context, *, request: str | None = None):
                 _truncate_discord_message(f"Solve failed: {type(e).__name__}: {e}")
             )
             return
+    collab_enabled = is_collab_enabled(str(ctx.channel.id))
+    log_message(ctx.channel.id, ctx.author.id, "user", _shared_log_content(ctx.message) if collab_enabled else (ctx.message.content or ""), ctx.guild.id if ctx.guild else None)
     await ctx.reply(reply_text, files=files)
+    log_message(ctx.channel.id, ctx.author.id, "assistant", reply_text, ctx.guild.id if ctx.guild else None)
 
 
 @bot.command(name="domain")
@@ -1394,10 +1397,13 @@ async def domain_cmd(ctx: commands.Context, *, request: str | None = None):
     reply_text = _format_domain_reply(domain_name, domain_text)
     if audit_text:
         reply_text += f"\n\nDomain audit:\n```text\n{audit_text}\n```"
+    collab_enabled = is_collab_enabled(str(ctx.channel.id))
+    log_message(ctx.channel.id, ctx.author.id, "user", _shared_log_content(ctx.message) if collab_enabled else (ctx.message.content or ""), ctx.guild.id if ctx.guild else None)
     messages = _split_discord_message(reply_text)
     await ctx.reply(messages[0])
     for chunk in messages[1:]:
         await ctx.send(chunk)
+    log_message(ctx.channel.id, ctx.author.id, "assistant", reply_text, ctx.guild.id if ctx.guild else None)
 
 
 @bot.command(name="problem")
@@ -1428,10 +1434,13 @@ async def problem_cmd(ctx: commands.Context, *, request: str | None = None):
     reply_text = _format_problem_reply(problem_name, problem_text)
     if reach_text:
         reply_text += f"\n\nGoal reachability check:\n```text\n{reach_text}\n```"
+    collab_enabled = is_collab_enabled(str(ctx.channel.id))
+    log_message(ctx.channel.id, ctx.author.id, "user", _shared_log_content(ctx.message) if collab_enabled else (ctx.message.content or ""), ctx.guild.id if ctx.guild else None)
     messages = _split_discord_message(reply_text)
     await ctx.reply(messages[0])
     for chunk in messages[1:]:
         await ctx.send(chunk)
+    log_message(ctx.channel.id, ctx.author.id, "assistant", reply_text, ctx.guild.id if ctx.guild else None)
 
 
 @bot.command(name="show")
