@@ -434,15 +434,25 @@ async def _run_domain_request(message: discord.Message, request_text: str) -> tu
 
 
 async def _run_problem_request(message: discord.Message, request_text: str) -> tuple[str, str]:
-    stored_domain_name = str(_working_artifacts(message).get("domain_name", "")).strip()
+    current = _working_artifacts(message)
+    stored_domain_name = str(current.get("domain_name", "")).strip()
+    stored_domain_text = _artifact_text(current, "domain")
     retry_feedback: str | None = None
     domain_name = ""
     problem_name = ""
     problem_text = ""
 
+    grounded_request = request_text
+    if stored_domain_text:
+        grounded_request = (
+            f"{request_text}\n\n"
+            f"The domain is already defined — generate a problem that uses only the types, "
+            f"predicates, and actions defined in it:\n{stored_domain_text}"
+        )
+
     for _ in range(2):
         llm_plan = await _llm_plan_from_natural_language(
-            message, request_text, retry_feedback
+            message, grounded_request, retry_feedback
         )
         domain_name = stored_domain_name or str(llm_plan.get("domain_name", "")).strip()
         problem_name = str(llm_plan.get("problem_name", "")).strip()
