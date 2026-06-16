@@ -490,7 +490,7 @@ def _detect_artifact_request(text: str) -> tuple[str, str, str] | None:
             continue
         if any(
             marker in lowered
-            for marker in ("don't like", "do not like", "should", "needs to", "must", "wrong")
+            for marker in ("don't like", "do not like", "needs to", "must", "wrong")
         ):
             return ("edit", artifact_type, normalized)
     return None
