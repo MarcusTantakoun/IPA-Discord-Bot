@@ -364,14 +364,13 @@ def get_recent_context(
     user_id: int | None,
     guild_id: int | None,
     channel_id: int | None = None,
-    limit: int = 1000,
+    limit: int | None = None,
     shared: bool = False,
 ):
     con = _db_connect()
     cur = con.cursor()
     if shared:
-        cur.execute(
-            """
+        query = """
             SELECT role, content, session_id, channel_id
             FROM messages
             WHERE channel_id = ?
@@ -380,18 +379,18 @@ def get_recent_context(
                     OR guild_id = ?
                   )
             ORDER BY id DESC
-            LIMIT ?
-            """,
-            (
-                str(channel_id) if channel_id is not None else None,
-                str(guild_id) if guild_id is not None else None,
-                str(guild_id) if guild_id is not None else None,
-                limit,
-            ),
-        )
-    else:
-        cur.execute(
             """
+        params: tuple = (
+            str(channel_id) if channel_id is not None else None,
+            str(guild_id) if guild_id is not None else None,
+            str(guild_id) if guild_id is not None else None,
+        )
+        if limit is not None:
+            query += " LIMIT ?"
+            params += (limit,)
+        cur.execute(query, params)
+    else:
+        query = """
             SELECT role, content, session_id, channel_id
             FROM messages
             WHERE user_id = ?
@@ -402,16 +401,17 @@ def get_recent_context(
             ORDER BY
                 CASE WHEN channel_id = ? THEN 0 ELSE 1 END,
                 id DESC
-            LIMIT ?
-            """,
-            (
-                str(user_id),
-                str(guild_id) if guild_id is not None else None,
-                str(guild_id) if guild_id is not None else None,
-                str(channel_id) if channel_id is not None else None,
-                limit,
-            ),
+            """
+        params = (
+            str(user_id),
+            str(guild_id) if guild_id is not None else None,
+            str(guild_id) if guild_id is not None else None,
+            str(channel_id) if channel_id is not None else None,
         )
+        if limit is not None:
+            query += " LIMIT ?"
+            params += (limit,)
+        cur.execute(query, params)
     rows = cur.fetchall()
     con.close()
     rows.reverse()
