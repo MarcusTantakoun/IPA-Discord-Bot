@@ -23,7 +23,6 @@ from .llm_helpers import (
     _all_llm_model_ids,
     _llm_audit_domain,
     _llm_check_goal_reachability,
-    _llm_classify_workflow_request,
     _llm_domain_pddl_edit_from_instruction,
     _llm_domain_edit_from_instruction,
     _llm_explain_artifact,
@@ -826,86 +825,7 @@ async def _handle_workflow_request(message: discord.Message) -> bool:
         log_message(message.channel.id, message.author.id, "assistant", reply_text, message.guild.id if message.guild else None)
         return True
 
-    try:
-        intent = await _llm_classify_workflow_request(message)
-    except Exception as e:
-        print("[LLM WORKFLOW CLASSIFIER ERROR]", type(e).__name__, e)
-        return False
-
-    if intent == "chat":
-        return False
-
-    async with message.channel.typing():
-        try:
-            if intent == "help":
-                reply_text = _format_help_message()
-                files = None
-            elif intent == "tools":
-                reply_text = _format_mcp_tools_message(await list_all_mcp_tools())
-                files = None
-            elif intent == "plan":
-                reply_text, files = await _run_plan_request(message, text)
-            elif intent == "domain":
-                domain_name, domain_text = await _run_domain_request(message, text)
-                _update_working_artifacts(message, domain=domain_text, domain_name=domain_name)
-                reply_text = _format_domain_reply(domain_name, domain_text)
-                try:
-                    audit_text = await _llm_audit_domain(message, domain_text)
-                    if audit_text:
-                        reply_text += f"\n\nDomain audit:\n```text\n{audit_text}\n```"
-                except Exception:
-                    pass
-                files = None
-            elif intent == "problem":
-                problem_name, problem_text = await _run_problem_request(message, text)
-                _update_working_artifacts(
-                    message,
-                    problem=problem_text,
-                    problem_name=problem_name,
-                )
-                reply_text = _format_problem_reply(problem_name, problem_text)
-                try:
-                    domain_text = _artifact_text(_working_artifacts(message), "domain")
-                    if domain_text:
-                        reach_text = await _llm_check_goal_reachability(message, domain_text, problem_text)
-                        if reach_text:
-                            reply_text += f"\n\nGoal reachability check:\n```text\n{reach_text}\n```"
-                except Exception:
-                    pass
-                files = None
-            elif intent == "validate_plan":
-                reply_text = await _run_validate_plan_request(message)
-                files = None
-            elif intent == "validate_domain":
-                reply_text = await _run_validate_domain_request(message)
-                files = None
-            elif intent == "validate_task":
-                reply_text = await _run_validate_task_request(message)
-                files = None
-            else:
-                return False
-        except Exception as e:
-            traceback.print_exc()
-            await message.reply(
-                _truncate_discord_message(f"Workflow failed: {type(e).__name__}: {e}"),
-                mention_author=False,
-            )
-            return True
-
-    collab_enabled = is_collab_enabled(str(message.channel.id))
-    log_message(message.channel.id, message.author.id, "user", _shared_log_content(message) if collab_enabled else text, message.guild.id if message.guild else None)
-
-    if files:
-        await message.reply(_truncate_discord_message(reply_text), files=files, mention_author=False)
-        log_message(message.channel.id, message.author.id, "assistant", reply_text, message.guild.id if message.guild else None)
-        return True
-
-    messages = _split_discord_message(reply_text)
-    await message.reply(messages[0], mention_author=False)
-    for chunk in messages[1:]:
-        await message.channel.send(chunk)
-    log_message(message.channel.id, message.author.id, "assistant", reply_text, message.guild.id if message.guild else None)
-    return True
+    return False
 async def _handle_member_confirmation_response(message: discord.Message) -> bool:
     key = (message.channel.id, message.author.id)
     pending = PENDING_MEMBER_CONFIRMATIONS.get(key)
