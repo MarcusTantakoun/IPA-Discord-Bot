@@ -419,9 +419,6 @@ async def _llm_plan_from_natural_language(
     )
     normalized = _normalize_server_update_payload(data)
 
-    if not normalized["domain_update"] or not normalized["task_update"]:
-        raise RuntimeError("The model did not return both `domain_update` and `task_update`.")
-
     return normalized
 
 
