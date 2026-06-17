@@ -86,6 +86,32 @@ def _json_repair_system_prompt() -> str:
     )
 
 
+def _extract_enhsp_plan_steps(log: str) -> str:
+    lines = log.splitlines()
+    in_plan = False
+    steps = []
+    for line in lines:
+        if line.strip() == "Found Plan:":
+            in_plan = True
+            continue
+        if in_plan:
+            if line.strip() == "" or line.startswith("Plan-Length") or line.startswith("Metric") or line.startswith("Planning") or line.startswith("Heuristic") or line.startswith("Search") or line.startswith("Expanded") or line.startswith("States") or line.startswith("Number"):
+                break
+            steps.append(line.strip())
+    return "\n".join(steps)
+
+
+def _extract_plan_from_output(output: dict) -> str | None:
+    sas_plan = output.get("sas_plan")
+    if isinstance(sas_plan, str) and sas_plan.strip():
+        return sas_plan.strip()
+    plan_log = output.get("plan")
+    if isinstance(plan_log, str) and plan_log.strip():
+        steps = _extract_enhsp_plan_steps(plan_log)
+        return steps if steps else plan_log.strip()
+    return None
+
+
 def _parse_solve_response_text(text: str) -> str:
     try:
         payload = _parse_llm_json_object(text)
@@ -96,17 +122,17 @@ def _parse_solve_response_text(text: str) -> str:
 
     output = payload.get("output")
     if isinstance(output, dict):
-        sas_plan = output.get("sas_plan")
-        if isinstance(sas_plan, str) and sas_plan.strip():
-            return sas_plan.strip()
+        extracted = _extract_plan_from_output(output)
+        if extracted:
+            return extracted
 
     result = payload.get("result")
     if isinstance(result, dict):
         result_output = result.get("output")
         if isinstance(result_output, dict):
-            sas_plan = result_output.get("sas_plan")
-            if isinstance(sas_plan, str) and sas_plan.strip():
-                return sas_plan.strip()
+            extracted = _extract_plan_from_output(result_output)
+            if extracted:
+                return extracted
 
         result_error = result.get("error")
         if isinstance(result_error, str) and result_error.strip():
