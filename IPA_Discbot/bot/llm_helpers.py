@@ -792,13 +792,13 @@ async def _llm_plan_edit_from_instruction(
 
 
 _SOLVER_DESCRIPTIONS = {
-    "paas_lama_first_solve": "Classical STRIPS planning — fast satisficing, good general default.",
-    "paas_dual_bfws_ffparser_solve": "Classical planning with width-based search — good when many state variables are irrelevant.",
-    "paas_enhsp_solve": "Numeric fluents — resource quantities, fuel, costs, capacities.",
-    "paas_metric_ff_2_0_solve": "Metric/numeric planning with optimization objectives.",
-    "paas_optic_solve": "Temporal + numeric planning — durative actions with continuous effects.",
-    "paas_tfd_solve": "Temporal planning — durative actions, concurrent execution, time constraints.",
-    "paas_forbiditerative_diverse_agl_solve": "Diverse planning — generates multiple alternative solutions.",
+    "paas_lama_first_solve": "Classical STRIPS/ADL planning — no numeric fluents, no durative actions. Fast satisficing, best general default.",
+    "paas_dual_bfws_ffparser_solve": "Classical STRIPS planning with width-based search — no numeric fluents, no durative actions. Good when many state variables are irrelevant.",
+    "paas_enhsp_solve": "PDDL 3.1 numeric planning — use when the domain has :numeric-fluents, :action-costs, fuel, resource quantities, or a :metric minimize/maximize directive. Do NOT use paas_metric_ff_2_0_solve for these domains.",
+    "paas_metric_ff_2_0_solve": "Older metric planning using pre-PDDL-3.1 numeric syntax only. Does NOT support :numeric-fluents or :action-costs keywords. Only use if the domain has no :numeric-fluents requirement.",
+    "paas_optic_solve": "Temporal + numeric planning — use when the domain has :durative-actions combined with numeric fluents or continuous effects.",
+    "paas_tfd_solve": "Temporal planning — use when the domain has :durative-actions and time constraints but no numeric fluents.",
+    "paas_forbiditerative_diverse_agl_solve": "Diverse planning — generates multiple alternative solutions. Use when the user asks for plan diversity or alternatives.",
 }
 
 
@@ -813,8 +813,13 @@ async def _llm_choose_solver(message: discord.Message, domain_text: str) -> str:
         f"Domain:\n{domain_text}"
     )
     system_prompt = (
-        "You are a PDDL planning expert. Select the best solver for the given domain based on its "
-        "requirements and action structure. Return only valid JSON."
+        "You are a PDDL planning expert. Select the best solver for the given domain by inspecting "
+        "its :requirements line and action structure. "
+        "If the domain uses :numeric-fluents or :action-costs, you MUST choose paas_enhsp_solve — "
+        "never paas_metric_ff_2_0_solve for those domains. "
+        "If the domain uses :durative-actions, choose paas_optic_solve (if also numeric) or paas_tfd_solve. "
+        "For plain classical STRIPS with no numeric or temporal requirements, choose paas_lama_first_solve. "
+        "Return only valid JSON."
     )
     data = await _request_llm_json(message, prompt, system_prompt)
     chosen = str(data.get("solver", "")).strip()
