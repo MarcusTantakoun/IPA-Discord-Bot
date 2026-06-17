@@ -1230,9 +1230,7 @@ async def on_message(message: discord.Message):
         return
 
     channel_id = str(message.channel.id)
-    if not is_collab_enabled(channel_id) and not is_chat_enabled(
-        str(message.author.id), channel_id
-    ):
+    if not is_chat_enabled(str(message.author.id), channel_id):
         return
 
     await _handle_conversation_message(message)
