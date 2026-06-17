@@ -867,13 +867,15 @@ async def _llm_audit_domain(
     prompt = (
         "Review this PDDL planning domain for common modeling bugs.\n"
         "Check for: missing preconditions, asymmetric action effects, unreachable goals, and redundant predicates.\n"
-        "If you find issues, list each one briefly (one per line). "
-        "If no issues are found, respond with exactly: No issues found.\n"
+        "Output only the final list of issues — do not show reasoning, analysis steps, or section headers.\n"
+        "Each issue on its own line. If no issues are found, respond with exactly: No issues found.\n"
         f"Domain PDDL:\n{domain_text}"
     )
     system_prompt = (
         "You audit PDDL planning domains for correctness. "
-        "Be concise and specific — name the action or predicate that has the problem. "
+        "Output only the list of issues found, one per line. "
+        "Do not explain your reasoning or show intermediate analysis. "
+        "Be specific — name the action or predicate that has the problem. "
         "Only flag genuine issues, not stylistic preferences."
     )
     selected_model = get_user_model(str(message.author.id)) or MODEL
