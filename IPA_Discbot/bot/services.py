@@ -36,6 +36,7 @@ from .llm_helpers import (
     _llm_problem_edit_from_instruction,
     _parse_solve_response_text,
     llm_reply,
+    prime_paas_tool_summary,
 )
 from .config import GUILD_ID, LAST_SOLVE_ARTIFACTS, MODEL, PENDING_MEMBER_CONFIRMATIONS, bot
 from .parsing import (
@@ -1149,6 +1150,12 @@ async def on_ready():
     _load_runtime_artifact_state(saved_artifacts, saved_history)
     print(f"Logged in as {bot.user} (id={bot.user.id})")
     print("[MCP] Startup uses lazy MCP connections. Planning commands will connect on first use.")
+    try:
+        all_tools = await list_all_mcp_tools()
+        prime_paas_tool_summary(all_tools.get("paas", []))
+        print(f"[MCP] Primed PaaS tool summary ({len(all_tools.get('paas', []))} tools).")
+    except Exception as e:
+        print(f"[MCP] Could not prime PaaS tool summary: {e}")
     guild = discord.Object(id=GUILD_ID)
     bot.tree.copy_global_to(guild=guild)
     synced = await bot.tree.sync(guild=guild)

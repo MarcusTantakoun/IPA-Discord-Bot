@@ -36,8 +36,18 @@ def _build_transcript(context_messages: list[dict]) -> str:
     return "\n".join(lines)
 
 
+_PAAS_TOOL_SUMMARY: str = ""
+
+
+def prime_paas_tool_summary(tools: list[dict]) -> None:
+    global _PAAS_TOOL_SUMMARY
+    names = [str(t.get("name", "")).strip() for t in tools if t.get("name")]
+    if names:
+        _PAAS_TOOL_SUMMARY = "Available PaaS planning tools: " + ", ".join(names) + "."
+
+
 def _conversation_system_prompt() -> str:
-    return (
+    base = (
         "You are an expert PDDL Knowledge Engineer and planning assistant inside Discord. "
         "Your goal is to help users conceptualize, design, and validate automated planning models. "
         "Keep answers concise and use Markdown for easy reading on Discord. "
@@ -55,6 +65,9 @@ def _conversation_system_prompt() -> str:
         "4. Problem State: Is the initial state complete? Is the goal formulation reachable and well-defined?\n\n"
         "Provide proactive recommendations on modeling choices (e.g., simplifying action parameters, utilizing constants, or addressing state-space explosion) to guide the user toward a robust formalization."
     )
+    if _PAAS_TOOL_SUMMARY:
+        base += f"\n\n{_PAAS_TOOL_SUMMARY}"
+    return base
 
 
 def _parse_llm_json_object(text: str) -> dict:
