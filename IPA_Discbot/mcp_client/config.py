@@ -9,6 +9,7 @@ MCPServerName = Literal["paas", "l2p"]
 
 PAAS_SOLVE_TOOL = "paas_lama_first_solve"
 PAAS_SOLVER_TOOLS = [
+    "automatic",
     "paas_dual_bfws_ffparser_solve",
     "paas_enhsp_solve",
     "paas_forbiditerative_diverse_agl_solve",

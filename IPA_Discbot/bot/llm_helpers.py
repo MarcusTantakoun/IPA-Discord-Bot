@@ -778,6 +778,38 @@ async def _llm_plan_edit_from_instruction(
     return plan_text
 
 
+_SOLVER_DESCRIPTIONS = {
+    "paas_lama_first_solve": "Classical STRIPS planning — fast satisficing, good general default.",
+    "paas_dual_bfws_ffparser_solve": "Classical planning with width-based search — good when many state variables are irrelevant.",
+    "paas_enhsp_solve": "Numeric fluents — resource quantities, fuel, costs, capacities.",
+    "paas_metric_ff_2_0_solve": "Metric/numeric planning with optimization objectives.",
+    "paas_optic_solve": "Temporal + numeric planning — durative actions with continuous effects.",
+    "paas_tfd_solve": "Temporal planning — durative actions, concurrent execution, time constraints.",
+    "paas_forbiditerative_diverse_agl_solve": "Diverse planning — generates multiple alternative solutions.",
+}
+
+
+async def _llm_choose_solver(message: discord.Message, domain_text: str) -> str:
+    solver_list = "\n".join(
+        f"- {name}: {desc}" for name, desc in _SOLVER_DESCRIPTIONS.items()
+    )
+    prompt = (
+        "Given the PDDL domain below, choose the most appropriate solver.\n"
+        f"Available solvers:\n{solver_list}\n\n"
+        "Return only JSON with this schema: {\"solver\": \"<solver_tool_name>\"}\n\n"
+        f"Domain:\n{domain_text}"
+    )
+    system_prompt = (
+        "You are a PDDL planning expert. Select the best solver for the given domain based on its "
+        "requirements and action structure. Return only valid JSON."
+    )
+    data = await _request_llm_json(message, prompt, system_prompt)
+    chosen = str(data.get("solver", "")).strip()
+    if chosen not in _SOLVER_DESCRIPTIONS:
+        return "paas_lama_first_solve"
+    return chosen
+
+
 async def _llm_audit_domain(
     message: discord.Message,
     domain_text: str,

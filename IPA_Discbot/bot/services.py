@@ -18,12 +18,13 @@ from IPA_Discbot.mcp_client import (
     validate_plan,
     validate_task,
 )
-from IPA_Discbot.mcp_client.config import PAAS_SOLVE_TOOL, PAAS_SOLVER_TOOLS
+from IPA_Discbot.mcp_client.config import PAAS_SOLVER_TOOLS
 
 from .llm_helpers import (
     _all_llm_model_ids,
     _llm_audit_domain,
     _llm_check_goal_reachability,
+    _llm_choose_solver,
     _llm_domain_pddl_edit_from_instruction,
     _llm_domain_edit_from_instruction,
     _llm_explain_artifact,
@@ -284,11 +285,14 @@ async def _run_plan_request(
 ) -> tuple[str, list[discord.File]]:
     domain_name = "domain"
     problem_name = "problem"
-    solver_tool = get_user_solver(str(message.author.id)) or PAAS_SOLVE_TOOL
+    solver_pref = get_user_solver(str(message.author.id)) or "automatic"
+    actual_solver = solver_pref
 
     if message.attachments:
         domain_text, problem_text = await _extract_pddl_attachments(message)
-        result = await solve_pddl(domain_text, problem_text, tool_name=solver_tool)
+        if solver_pref == "automatic":
+            actual_solver = await _llm_choose_solver(message, domain_text)
+        result = await solve_pddl(domain_text, problem_text, tool_name=actual_solver)
         result = _parse_solve_response_text(result)
     else:
         request_text = (request_text or "").strip()
@@ -312,7 +316,9 @@ async def _run_plan_request(
                     "No current problem to solve with. Run `!problem` or `!plan` first, or attach a problem PDDL file."
                 )
 
-            raw_result = await solve_pddl(domain_text, problem_text, tool_name=solver_tool)
+            if solver_pref == "automatic":
+                actual_solver = await _llm_choose_solver(message, domain_text)
+            raw_result = await solve_pddl(domain_text, problem_text, tool_name=actual_solver)
             result = _parse_solve_response_text(raw_result)
             if _planner_output_indicates_failure(result) and not _solve_output_has_action_steps(
                 result
@@ -366,7 +372,9 @@ async def _run_plan_request(
                 if not domain_text or not problem_text:
                     raise RuntimeError("Failed to generate PDDL from the natural-language request.")
 
-                raw_result = await solve_pddl(domain_text, problem_text, tool_name=solver_tool)
+                if solver_pref == "automatic" and actual_solver == "automatic":
+                    actual_solver = await _llm_choose_solver(message, domain_text)
+                raw_result = await solve_pddl(domain_text, problem_text, tool_name=actual_solver)
                 result = _parse_solve_response_text(raw_result)
                 if _planner_output_indicates_failure(result) and not _solve_output_has_action_steps(
                     result
@@ -394,6 +402,7 @@ async def _run_plan_request(
     reply = f"Generated planning artifacts.\n\nCurrent plan:\n```text\n{result.strip()}\n```"
     if val_section:
         reply += f"\n\n{val_section}"
+    reply += f"\n\nSolver used: `{actual_solver}`"
     return reply, None
 
 
