@@ -67,6 +67,15 @@ def _split_discord_message(text: str, limit: int = 1900) -> list[str]:
     current_length = 0
 
     for line in text.splitlines():
+        # Hard-split lines that are themselves longer than the limit
+        while len(line) > limit:
+            if current:
+                chunks.append("\n".join(current))
+                current = []
+                current_length = 0
+            chunks.append(line[:limit])
+            line = line[limit:]
+
         addition = len(line) + (1 if current else 0)
         if current and current_length + addition > limit:
             chunks.append("\n".join(current))
