@@ -143,6 +143,11 @@ def init_db():
             model_id TEXT NOT NULL
         );
 
+        CREATE TABLE IF NOT EXISTS user_solver_selection (
+            user_id TEXT NOT NULL PRIMARY KEY,
+            solver_tool TEXT NOT NULL
+        );
+
         CREATE TABLE IF NOT EXISTS user_share_mode (
             user_id TEXT NOT NULL PRIMARY KEY,
             share_mode TEXT NOT NULL CHECK (share_mode IN ('individual', 'group'))
@@ -457,6 +462,30 @@ def set_user_model(user_id: str, model_id: str):
         UPDATE SET model_id=excluded.model_id
         """,
         (user_id, model_id),
+    )
+    con.commit()
+    con.close()
+
+
+def get_user_solver(user_id: str) -> str | None:
+    con = _db_connect()
+    cur = con.cursor()
+    cur.execute("SELECT solver_tool FROM user_solver_selection WHERE user_id = ?", (user_id,))
+    row = cur.fetchone()
+    con.close()
+    return row[0] if row else None
+
+
+def set_user_solver(user_id: str, solver_tool: str):
+    con = _db_connect()
+    cur = con.cursor()
+    cur.execute(
+        """
+        INSERT INTO user_solver_selection (user_id, solver_tool)
+        VALUES (?, ?) ON CONFLICT(user_id) DO
+        UPDATE SET solver_tool=excluded.solver_tool
+        """,
+        (user_id, solver_tool),
     )
     con.commit()
     con.close()

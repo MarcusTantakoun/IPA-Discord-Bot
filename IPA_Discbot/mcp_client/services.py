@@ -27,10 +27,10 @@ _MCP_TOOL_CATALOG: dict[MCPServerName, list[dict[str, Any]]] = {
 }
 
 
-async def solve_pddl(domain: str, problem: str, timeout_s: int = 30) -> str:
+async def solve_pddl(domain: str, problem: str, timeout_s: int = 30, tool_name: str = PAAS_SOLVE_TOOL) -> str:
     result = await call_mcp_tool(
         "paas",
-        PAAS_SOLVE_TOOL,
+        tool_name,
         {"domain": domain, "problem": problem, "timeout_s": timeout_s},
     )
     return extract_plan_text(result)

@@ -8,6 +8,15 @@ load_dotenv()
 MCPServerName = Literal["paas", "l2p"]
 
 PAAS_SOLVE_TOOL = "paas_lama_first_solve"
+PAAS_SOLVER_TOOLS = [
+    "paas_dual_bfws_ffparser_solve",
+    "paas_enhsp_solve",
+    "paas_forbiditerative_diverse_agl_solve",
+    "paas_lama_first_solve",
+    "paas_metric_ff_2_0_solve",
+    "paas_optic_solve",
+    "paas_tfd_solve",
+]
 PAAS_VAL_TOOL = "paas_val_validate"
 PAAS_VALIDATE_DOMAIN_TOOL = "paas_pddl_validate_domain"
 PAAS_VALIDATE_PLAN_TOOL = "paas_pddl_validate_plan"

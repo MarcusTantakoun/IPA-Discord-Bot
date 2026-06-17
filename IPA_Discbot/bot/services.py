@@ -18,6 +18,7 @@ from IPA_Discbot.mcp_client import (
     validate_plan,
     validate_task,
 )
+from IPA_Discbot.mcp_client.config import PAAS_SOLVE_TOOL, PAAS_SOLVER_TOOLS
 
 from .llm_helpers import (
     _all_llm_model_ids,
@@ -69,6 +70,7 @@ from .storage import (
     get_share_mode,
     get_recent_context,
     get_user_model,
+    get_user_solver,
     is_collab_enabled,
     is_chat_enabled,
     load_saved_working_artifacts,
@@ -79,6 +81,7 @@ from .storage import (
     set_chat_enabled,
     set_share_mode,
     set_user_model,
+    set_user_solver,
     user_has_any_provider_key,
 )
 
@@ -281,10 +284,11 @@ async def _run_plan_request(
 ) -> tuple[str, list[discord.File]]:
     domain_name = "domain"
     problem_name = "problem"
+    solver_tool = get_user_solver(str(message.author.id)) or PAAS_SOLVE_TOOL
 
     if message.attachments:
         domain_text, problem_text = await _extract_pddl_attachments(message)
-        result = await solve_pddl(domain_text, problem_text)
+        result = await solve_pddl(domain_text, problem_text, tool_name=solver_tool)
         result = _parse_solve_response_text(result)
     else:
         request_text = (request_text or "").strip()
@@ -308,7 +312,7 @@ async def _run_plan_request(
                     "No current problem to solve with. Run `!problem` or `!plan` first, or attach a problem PDDL file."
                 )
 
-            raw_result = await solve_pddl(domain_text, problem_text)
+            raw_result = await solve_pddl(domain_text, problem_text, tool_name=solver_tool)
             result = _parse_solve_response_text(raw_result)
             if _planner_output_indicates_failure(result) and not _solve_output_has_action_steps(
                 result
@@ -362,7 +366,7 @@ async def _run_plan_request(
                 if not domain_text or not problem_text:
                     raise RuntimeError("Failed to generate PDDL from the natural-language request.")
 
-                raw_result = await solve_pddl(domain_text, problem_text)
+                raw_result = await solve_pddl(domain_text, problem_text, tool_name=solver_tool)
                 result = _parse_solve_response_text(raw_result)
                 if _planner_output_indicates_failure(result) and not _solve_output_has_action_steps(
                     result
@@ -1085,6 +1089,27 @@ async def use_cmd(interaction: discord.Interaction, model_id: str):
 
     set_user_model(str(interaction.user.id), model_id)
     await interaction.response.send_message(f"Now using: {model_id}", ephemeral=True)
+
+
+async def solver_autocomplete(
+    interaction: discord.Interaction, current: str
+) -> list[app_commands.Choice[str]]:
+    current_lower = (current or "").lower()
+    matches = [s for s in PAAS_SOLVER_TOOLS if current_lower in s.lower()]
+    return [app_commands.Choice(name=s, value=s) for s in matches[:25]]
+
+
+@bot.tree.command(name="usesolver", description="Choose the PaaS planner to use for !plan")
+@app_commands.describe(solver="Pick a solver")
+@app_commands.autocomplete(solver=solver_autocomplete)
+async def usesolver_cmd(interaction: discord.Interaction, solver: str):
+    if solver not in PAAS_SOLVER_TOOLS:
+        await interaction.response.send_message(
+            f"Unknown solver. Options: {', '.join(PAAS_SOLVER_TOOLS)}", ephemeral=True
+        )
+        return
+    set_user_solver(str(interaction.user.id), solver)
+    await interaction.response.send_message(f"Now using solver: {solver}", ephemeral=True)
 
 
 @bot.tree.command(name="setkey", description="Set your API key for a provider")
