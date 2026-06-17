@@ -102,13 +102,19 @@ def _extract_enhsp_plan_steps(log: str) -> str:
 
 
 def _extract_plan_from_output(output: dict) -> str | None:
+    # LAMA / Fast Downward style
     sas_plan = output.get("sas_plan")
     if isinstance(sas_plan, str) and sas_plan.strip():
         return sas_plan.strip()
+    # ENHSP / OPTIC / TFD style
     plan_log = output.get("plan")
     if isinstance(plan_log, str) and plan_log.strip():
         steps = _extract_enhsp_plan_steps(plan_log)
         return steps if steps else plan_log.strip()
+    # metric-ff style
+    problem_plan = output.get("problem.plan")
+    if isinstance(problem_plan, str) and problem_plan.strip():
+        return problem_plan.strip()
     return None
 
 

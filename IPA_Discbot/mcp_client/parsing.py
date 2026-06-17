@@ -33,9 +33,18 @@ def compact_tool_arguments(arguments: dict[str, Any]) -> dict[str, Any]:
 def _extract_plan_from_mapping(mapping: dict[str, Any]) -> str | None:
     output = mapping.get("output")
     if isinstance(output, dict):
+        # LAMA / Fast Downward
         sas_plan = output.get("sas_plan")
         if isinstance(sas_plan, str) and sas_plan.strip():
             return sas_plan.strip()
+        # ENHSP / OPTIC / TFD
+        plan = output.get("plan")
+        if isinstance(plan, str) and plan.strip():
+            return plan.strip()
+        # metric-ff
+        problem_plan = output.get("problem.plan")
+        if isinstance(problem_plan, str) and problem_plan.strip():
+            return problem_plan.strip()
 
     nested_result = mapping.get("result")
     if isinstance(nested_result, dict):

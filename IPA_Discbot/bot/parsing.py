@@ -102,7 +102,11 @@ def _pddl_from_l2p_payload(payload: dict[str, object], *keys: str) -> str:
 def _solve_output_has_action_steps(text: str) -> bool:
     for raw_line in text.splitlines():
         line = raw_line.strip()
+        # Classical planners (LAMA, BFWS): (action ...)
         if line.startswith("(") and line.endswith(")"):
+            return True
+        # Temporal/numeric planners (ENHSP, TFD, OPTIC): 0.0: (action ...)
+        if re.match(r"^\d+\.?\d*:\s*\(", line):
             return True
     return False
 
@@ -110,12 +114,21 @@ def _solve_output_has_action_steps(text: str) -> bool:
 def _planner_output_indicates_failure(text: str) -> bool:
     lowered = text.lower()
     failure_markers = (
+        # Fast Downward / LAMA
         "driver aborting",
         "translate exit code",
         "search exit code",
         "planner failed",
         "unsolvable",
+        # Generic
         "error:",
+        "syntax error",
+        # ENHSP
+        "problem not solved",
+        "no plan found",
+        # OPTIC / TFD
+        "problem is unsolvable",
+        "could not find a solution",
     )
     return any(marker in lowered for marker in failure_markers)
 
