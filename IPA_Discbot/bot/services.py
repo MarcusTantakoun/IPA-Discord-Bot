@@ -1323,13 +1323,18 @@ async def plan_cmd(ctx: commands.Context, *, request: str | None = None):
             reply_text, files = await _run_plan_request(ctx.message, request)
         except Exception as e:
             traceback.print_exc()
-            await ctx.reply(
-                _truncate_discord_message(f"Solve failed: {type(e).__name__}: {e}")
-            )
+            error_text = f"Solve failed: {type(e).__name__}: {e}"
+            error_chunks = _split_discord_message(error_text)
+            await ctx.reply(error_chunks[0])
+            for chunk in error_chunks[1:]:
+                await ctx.send(chunk)
             return
     collab_enabled = is_collab_enabled(str(ctx.channel.id))
     log_message(ctx.channel.id, ctx.author.id, "user", _shared_log_content(ctx.message) if collab_enabled else (ctx.message.content or ""), ctx.guild.id if ctx.guild else None)
-    await ctx.reply(reply_text, files=files)
+    messages = _split_discord_message(reply_text)
+    await ctx.reply(messages[0], files=files or None)
+    for chunk in messages[1:]:
+        await ctx.send(chunk)
     log_message(ctx.channel.id, ctx.author.id, "assistant", reply_text, ctx.guild.id if ctx.guild else None)
 
 
