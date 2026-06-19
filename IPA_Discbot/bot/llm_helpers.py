@@ -13,7 +13,7 @@ from IPA_Discbot.mcp_client import (
     get_mcp_tool_catalog,
 )
 from .config import MODEL
-from .storage import get_effective_provider_key, get_user_model
+from .storage import get_effective_provider_key, get_recent_context, get_user_model, is_collab_enabled
 
 
 def _build_transcript(context_messages: list[dict]) -> str:
@@ -448,11 +448,36 @@ def _normalize_server_update_payload(data: dict) -> dict:
 async def _llm_plan_from_natural_language(
     message: discord.Message, request_text: str, feedback: str | None = None
 ) -> dict:
+    collab_enabled = is_collab_enabled(str(message.channel.id))
+    recent = get_recent_context(
+        user_id=None if collab_enabled else message.author.id,
+        guild_id=message.guild.id if message.guild else None,
+        channel_id=message.channel.id,
+        shared=collab_enabled,
+        limit=20,
+    )
+
+    context_snippet = ""
+    if recent:
+        lines = []
+        for m in recent:
+            role = (m.get("role") or "").lower()
+            content = (m.get("content") or "").strip()
+            prefix = "Assistant" if role == "assistant" else "User"
+            lines.append(f"{prefix}: {content}")
+        context_snippet = "\n".join(lines)
+
     prompt = (
         "Convert this planning request into one domain update and one problem update for the local MCP planning server.\n"
         "Return only JSON with keys domain_name, problem_name, domain_update, and task_update.\n"
-        f"Original request: {json.dumps(request_text)}"
     )
+    if context_snippet:
+        prompt += (
+            "Use the following recent conversation to resolve any references like "
+            "'the domain we just mentioned' or 'what we discussed':\n"
+            f"<conversation>\n{context_snippet}\n</conversation>\n"
+        )
+    prompt += f"Original request: {json.dumps(request_text)}"
     if feedback:
         prompt += (
             "\nThe previous attempt failed after being sent to the planning tools. "
@@ -866,15 +891,16 @@ async def _llm_audit_domain(
 ) -> str:
     prompt = (
         "Review this PDDL planning domain for common modeling bugs.\n"
-        "Check for: missing preconditions, asymmetric action effects, unreachable goals, and redundant predicates.\n"
-        "Output only the final list of issues — do not show reasoning, analysis steps, or section headers.\n"
-        "Each issue on its own line. If no issues are found, respond with exactly: No issues found.\n"
+        "Walk through each check systematically with a bold header per category, then list what you find per action or predicate with a brief verdict.\n"
+        "Categories to check: Preconditions, Asymmetric effects, Predicates, Action-costs, and any other relevant structural issues.\n"
+        "End with a numbered **Issues found:** section listing only genuine bugs. If no issues are found, write: No issues found.\n"
         f"Domain PDDL:\n{domain_text}"
     )
     system_prompt = (
         "You audit PDDL planning domains for correctness. "
-        "Output only the list of issues found, one per line. "
-        "Do not explain your reasoning or show intermediate analysis. "
+        "Show your analysis per category using bold headers (e.g. **Checking preconditions:**), "
+        "then check each action or predicate with a brief verdict. "
+        "Finish with a numbered issues list. "
         "Be specific — name the action or predicate that has the problem. "
         "Only flag genuine issues, not stylistic preferences."
     )

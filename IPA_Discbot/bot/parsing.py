@@ -30,16 +30,35 @@ def _split_discord_message(text: str, limit: int = 1900) -> list[str]:
         current_prefix = prefix
 
         for line in body_lines:
+            prefix_part = (current_prefix + "\n") if current_prefix else ""
+            overhead = len(prefix_part) + len(fence_open) + len(fence_close)
+
+            # Hard-split lines that won't fit even alone inside a fenced block
+            while len(line) + overhead > limit:
+                if current_body:
+                    completed = (
+                        prefix_part
+                        + fence_open
+                        + "\n".join(current_body)
+                        + fence_close
+                    )
+                    chunks.append(completed)
+                    current_body = []
+                    current_prefix = ""
+                    prefix_part = ""
+                    overhead = len(fence_open) + len(fence_close)
+                piece = line[: limit - overhead]
+                chunks.append(fence_open + piece + fence_close)
+                line = line[len(piece):]
+
+            if not line:
+                continue
+
             candidate_body = "\n".join(current_body + [line])
-            candidate = (
-                (current_prefix + "\n" if current_prefix else "")
-                + fence_open
-                + candidate_body
-                + fence_close
-            )
+            candidate = prefix_part + fence_open + candidate_body + fence_close
             if current_body and len(candidate) > limit:
                 completed = (
-                    (current_prefix + "\n" if current_prefix else "")
+                    prefix_part
                     + fence_open
                     + "\n".join(current_body)
                     + fence_close
@@ -51,15 +70,11 @@ def _split_discord_message(text: str, limit: int = 1900) -> list[str]:
                 current_body.append(line)
 
         if current_body:
-            completed = (
-                (current_prefix + "\n" if current_prefix else "")
-                + fence_open
-                + "\n".join(current_body)
-                + fence_close
-            )
+            prefix_part = (current_prefix + "\n") if current_prefix else ""
+            completed = prefix_part + fence_open + "\n".join(current_body) + fence_close
             chunks.append(completed)
 
-        if chunks:
+        if chunks and all(len(c) <= limit for c in chunks):
             return chunks
 
     chunks: list[str] = []

@@ -155,7 +155,7 @@ def _format_help_message() -> str:
         "",
         "Advanced / Manual Validation:",
         "`!validate_domain` Validate a domain PDDL file with the PaaS domain validation tool.",
-        "`!validate_task` Validate a domain/problem pair with the PaaS task validation tool.",
+        "`!validate_problem` Validate a domain/problem pair with the PaaS task validation tool.",
         "`!validate_plan` Validate a domain/problem/plan triple with the PaaS plan validation tool.",
         "",
         "MCP Tools:",
@@ -387,13 +387,17 @@ async def _run_plan_request(
                 raise RuntimeError(retry_feedback or "Failed to produce a valid plan.")
 
     try:
-        val_result = await validate_plan_with_val(domain_text, problem_text, result)
-        val_valid = _val_output_indicates_valid(val_result)
-        val_section = (
-            "VAL: Plan is valid."
-            if val_valid
-            else f"VAL: Plan is invalid.\n```text\n{val_result.strip()}\n```"
-        )
+        val_result = await validate_plan(domain_text, problem_text, result)
+        val_valid = _validation_indicates_valid("plan", val_result)
+        if val_valid:
+            val_section = "VAL: Plan is valid."
+        else:
+            details = _collect_validation_text(_extract_validation_payload(val_result)).strip()
+            val_section = (
+                f"VAL: Plan is invalid.\n```text\n{details}\n```"
+                if details
+                else "VAL: Plan is invalid."
+            )
     except Exception:
         val_section = ""
 
@@ -1216,7 +1220,10 @@ async def _handle_conversation_message(message: discord.Message):
         message.guild.id if message.guild else None,
     )
 
-    await message.reply(_truncate_discord_message(answer), mention_author=False)
+    chunks = _split_discord_message(answer)
+    await message.reply(chunks[0], mention_author=False)
+    for chunk in chunks[1:]:
+        await message.channel.send(chunk)
 
 
 @bot.event
@@ -1576,7 +1583,7 @@ async def validate_domain_cmd(ctx: commands.Context):
     await ctx.reply(result)
 
 
-@bot.command(name="validate_task")
+@bot.command(name="validate_problem")
 async def validate_task_cmd(ctx: commands.Context):
     async with ctx.typing():
         try:
