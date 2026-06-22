@@ -1359,6 +1359,20 @@ async def plan_cmd(ctx: commands.Context, *, request: str | None = None):
             return
     collab_enabled = is_collab_enabled(str(ctx.channel.id))
     log_message(ctx.channel.id, ctx.author.id, "user", _shared_log_content(ctx.message) if collab_enabled else (ctx.message.content or ""), ctx.guild.id if ctx.guild else None)
+    # When PDDL files were attached, log their content so future chat queries
+    # can reference "the domain/problem we just loaded" correctly.
+    if ctx.message.attachments:
+        current = _working_artifacts(ctx.message)
+        attached_domain = _artifact_text(current, "domain")
+        attached_problem = _artifact_text(current, "problem")
+        if attached_domain:
+            log_message(ctx.channel.id, ctx.author.id, "user",
+                f"[Attached domain PDDL]\n```\n{attached_domain.strip()}\n```",
+                ctx.guild.id if ctx.guild else None)
+        if attached_problem:
+            log_message(ctx.channel.id, ctx.author.id, "user",
+                f"[Attached problem PDDL]\n```\n{attached_problem.strip()}\n```",
+                ctx.guild.id if ctx.guild else None)
     messages = _split_discord_message(reply_text)
     await ctx.reply(messages[0], files=files or None)
     for chunk in messages[1:]:
