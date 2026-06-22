@@ -219,6 +219,44 @@ def log_message(
     con.close()
 
 
+def clear_context(
+    channel_id: int,
+    user_id: int,
+    guild_id: int | None,
+    shared: bool = False,
+) -> int:
+    con = _db_connect()
+    cur = con.cursor()
+    if shared:
+        cur.execute(
+            """
+            DELETE FROM messages
+            WHERE channel_id = ?
+              AND (
+                    (? IS NULL AND guild_id IS NULL)
+                    OR guild_id = ?
+                  )
+            """,
+            (str(channel_id), str(guild_id) if guild_id else None, str(guild_id) if guild_id else None),
+        )
+    else:
+        cur.execute(
+            """
+            DELETE FROM messages
+            WHERE user_id = ?
+              AND (
+                    (? IS NULL AND guild_id IS NULL)
+                    OR guild_id = ?
+                  )
+            """,
+            (str(user_id), str(guild_id) if guild_id else None, str(guild_id) if guild_id else None),
+        )
+    deleted = cur.rowcount
+    con.commit()
+    con.close()
+    return deleted
+
+
 def cleanup_unsaved_sessions():
     con = _db_connect()
     try:

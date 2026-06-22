@@ -69,6 +69,7 @@ from .state import (
     _working_artifacts,
 )
 from .storage import (
+    clear_context,
     delete_all_provider_keys,
     get_share_mode,
     get_recent_context,
@@ -178,6 +179,7 @@ def _format_help_message() -> str:
         "`/use <model_id>` Set which model the bot should use for your requests.",
         "`/setkey <provider> <api_key>` Save your provider API key for `openai`, `gemini`, `deepseek`, `anthropic`, `mistral`, or `ollama`.",
         "`!remove` Remove all your stored API keys from the bot.",
+        "`!clear` Wipe your conversation history (or the whole channel's history if collab mode is on).",
     ]
     return "\n".join(lines)
 
@@ -1162,6 +1164,22 @@ async def setkey_cmd(interaction: discord.Interaction, provider: str, api_key: s
         f"Saved key for {provider}.",
         ephemeral=True,
     )
+
+
+@bot.command(name="clear")
+async def clear_cmd(ctx: commands.Context):
+    collab_enabled = is_collab_enabled(str(ctx.channel.id))
+    deleted = clear_context(
+        channel_id=ctx.channel.id,
+        user_id=ctx.author.id,
+        guild_id=ctx.guild.id if ctx.guild else None,
+        shared=collab_enabled,
+    )
+    scope = "channel" if collab_enabled else "your"
+    if deleted:
+        await ctx.reply(f"Cleared {deleted} message(s) from {scope} conversation history.", mention_author=False)
+    else:
+        await ctx.reply(f"No conversation history found to clear.", mention_author=False)
 
 
 @bot.command(name="remove")
