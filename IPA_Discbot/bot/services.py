@@ -54,7 +54,6 @@ from .parsing import (
     _solve_output_has_action_steps,
     _split_discord_message,
     _summarize_validation_failure,
-    _truncate_discord_message,
     _validation_indicates_valid,
     _val_output_indicates_valid,
 )
@@ -270,7 +269,7 @@ def _format_validation_result(kind: str, raw: object) -> str:
     if check_url:
         message += f"\n\nCheck URL: {check_url}"
 
-    return _truncate_discord_message(message)
+    return message
 
 
 async def _update_domain_with_fallback(
@@ -685,7 +684,7 @@ async def _run_explain_artifact_request(message: discord.Message, artifact_type:
     if not explanation:
         raise RuntimeError(f"Failed to explain the current {artifact_type}.")
     header = f"{artifact_type.capitalize()} explanation:"
-    return _truncate_discord_message(f"{header}\n{explanation}")
+    return f"{header}\n{explanation}"
 
 
 async def _run_files_request(message: discord.Message) -> tuple[str, list[discord.File]]:
@@ -840,10 +839,10 @@ async def _handle_workflow_request(message: discord.Message) -> bool:
                 return False
         except Exception as e:
             traceback.print_exc()
-            await message.reply(
-                _truncate_discord_message(f"HITL workflow failed: {type(e).__name__}: {e}"),
-                mention_author=False,
-            )
+            err_chunks = _split_discord_message(f"HITL workflow failed: {type(e).__name__}: {e}")
+            await message.reply(err_chunks[0], mention_author=False)
+            for chunk in err_chunks[1:]:
+                await message.channel.send(chunk)
             return True
 
         collab_enabled = is_collab_enabled(str(message.channel.id))
@@ -1059,13 +1058,16 @@ async def _handle_solve_request(message: discord.Message) -> bool:
             reply_text, files = await _run_plan_request(message, None)
         except Exception as e:
             traceback.print_exc()
-            await message.reply(
-                _truncate_discord_message(f"Solve failed: {type(e).__name__}: {e}"),
-                mention_author=False,
-            )
+            err_chunks = _split_discord_message(f"Solve failed: {type(e).__name__}: {e}")
+            await message.reply(err_chunks[0], mention_author=False)
+            for chunk in err_chunks[1:]:
+                await message.channel.send(chunk)
             return True
 
-    await message.reply(reply_text, files=files, mention_author=False)
+    chunks = _split_discord_message(reply_text)
+    await message.reply(chunks[0], files=files, mention_author=False)
+    for chunk in chunks[1:]:
+        await message.channel.send(chunk)
     return True
 
 
@@ -1405,9 +1407,10 @@ async def domain_cmd(ctx: commands.Context, *, request: str | None = None):
             _update_working_artifacts(ctx.message, domain=domain_text, domain_name=domain_name)
         except Exception as e:
             traceback.print_exc()
-            await ctx.reply(
-                _truncate_discord_message(f"Domain generation failed: {type(e).__name__}: {e}")
-            )
+            err_chunks = _split_discord_message(f"Domain generation failed: {type(e).__name__}: {e}")
+            await ctx.reply(err_chunks[0])
+            for chunk in err_chunks[1:]:
+                await ctx.send(chunk)
             return
         try:
             audit_text = await _llm_audit_domain(ctx.message, domain_text)
@@ -1441,9 +1444,10 @@ async def problem_cmd(ctx: commands.Context, *, request: str | None = None):
             )
         except Exception as e:
             traceback.print_exc()
-            await ctx.reply(
-                _truncate_discord_message(f"Problem generation failed: {type(e).__name__}: {e}")
-            )
+            err_chunks = _split_discord_message(f"Problem generation failed: {type(e).__name__}: {e}")
+            await ctx.reply(err_chunks[0])
+            for chunk in err_chunks[1:]:
+                await ctx.send(chunk)
             return
         try:
             domain_text = _artifact_text(_working_artifacts(ctx.message), "domain")
@@ -1475,9 +1479,10 @@ async def show_cmd(ctx: commands.Context, artifact_type: str):
             reply_text, files = await _run_show_artifact_request(ctx.message, normalized)
         except Exception as e:
             traceback.print_exc()
-            await ctx.reply(
-                _truncate_discord_message(f"Show failed: {type(e).__name__}: {e}")
-            )
+            err_chunks = _split_discord_message(f"Show failed: {type(e).__name__}: {e}")
+            await ctx.reply(err_chunks[0])
+            for chunk in err_chunks[1:]:
+                await ctx.send(chunk)
             return
 
     messages = _split_discord_message(reply_text)
@@ -1493,9 +1498,10 @@ async def files_cmd(ctx: commands.Context):
             reply_text, files = await _run_files_request(ctx.message)
         except Exception as e:
             traceback.print_exc()
-            await ctx.reply(
-                _truncate_discord_message(f"Files failed: {type(e).__name__}: {e}")
-            )
+            err_chunks = _split_discord_message(f"Files failed: {type(e).__name__}: {e}")
+            await ctx.reply(err_chunks[0])
+            for chunk in err_chunks[1:]:
+                await ctx.send(chunk)
             return
 
     await ctx.reply(reply_text, files=files)
@@ -1513,9 +1519,10 @@ async def explain_cmd(ctx: commands.Context, artifact_type: str):
             reply_text = await _run_explain_artifact_request(ctx.message, normalized)
         except Exception as e:
             traceback.print_exc()
-            await ctx.reply(
-                _truncate_discord_message(f"Explain failed: {type(e).__name__}: {e}")
-            )
+            err_chunks = _split_discord_message(f"Explain failed: {type(e).__name__}: {e}")
+            await ctx.reply(err_chunks[0])
+            for chunk in err_chunks[1:]:
+                await ctx.send(chunk)
             return
 
     messages = _split_discord_message(reply_text)
@@ -1546,9 +1553,10 @@ async def edit_cmd(ctx: commands.Context, artifact_type: str, *, instruction: st
                 reply_text, files = await _run_edit_plan_request(ctx.message, edit_instruction)
         except Exception as e:
             traceback.print_exc()
-            await ctx.reply(
-                _truncate_discord_message(f"Edit failed: {type(e).__name__}: {e}")
-            )
+            err_chunks = _split_discord_message(f"Edit failed: {type(e).__name__}: {e}")
+            await ctx.reply(err_chunks[0])
+            for chunk in err_chunks[1:]:
+                await ctx.send(chunk)
             return
 
     messages = _split_discord_message(reply_text)
@@ -1569,9 +1577,10 @@ async def undo_cmd(ctx: commands.Context, artifact_type: str):
             reply_text, files = await _run_undo_request(ctx.message, normalized)
         except Exception as e:
             traceback.print_exc()
-            await ctx.reply(
-                _truncate_discord_message(f"Undo failed: {type(e).__name__}: {e}")
-            )
+            err_chunks = _split_discord_message(f"Undo failed: {type(e).__name__}: {e}")
+            await ctx.reply(err_chunks[0])
+            for chunk in err_chunks[1:]:
+                await ctx.send(chunk)
             return
 
     messages = _split_discord_message(reply_text)
@@ -1593,9 +1602,10 @@ async def audit_cmd(ctx: commands.Context):
             result = await _llm_audit_domain(ctx.message, domain_text)
         except Exception as e:
             traceback.print_exc()
-            await ctx.reply(
-                _truncate_discord_message(f"Audit failed: {type(e).__name__}: {e}")
-            )
+            err_chunks = _split_discord_message(f"Audit failed: {type(e).__name__}: {e}")
+            await ctx.reply(err_chunks[0])
+            for chunk in err_chunks[1:]:
+                await ctx.send(chunk)
             return
 
     reply_text = f"Domain audit:\n```text\n{result}\n```"
@@ -1612,11 +1622,15 @@ async def validate_plan_cmd(ctx: commands.Context):
             result = await _run_validate_plan_request(ctx.message)
         except Exception as e:
             traceback.print_exc()
-            await ctx.reply(
-                _truncate_discord_message(f"Plan validation failed: {type(e).__name__}: {e}")
-            )
+            err_chunks = _split_discord_message(f"Plan validation failed: {type(e).__name__}: {e}")
+            await ctx.reply(err_chunks[0])
+            for chunk in err_chunks[1:]:
+                await ctx.send(chunk)
             return
-    await ctx.reply(result)
+    chunks = _split_discord_message(result)
+    await ctx.reply(chunks[0])
+    for chunk in chunks[1:]:
+        await ctx.send(chunk)
 
 
 @bot.command(name="validate_domain")
@@ -1626,14 +1640,15 @@ async def validate_domain_cmd(ctx: commands.Context):
             result = await _run_validate_domain_request(ctx.message)
         except Exception as e:
             traceback.print_exc()
-            await ctx.reply(
-                _truncate_discord_message(
-                    f"Domain validation failed: {type(e).__name__}: {e}"
-                )
-            )
+            err_chunks = _split_discord_message(f"Domain validation failed: {type(e).__name__}: {e}")
+            await ctx.reply(err_chunks[0])
+            for chunk in err_chunks[1:]:
+                await ctx.send(chunk)
             return
-
-    await ctx.reply(result)
+    chunks = _split_discord_message(result)
+    await ctx.reply(chunks[0])
+    for chunk in chunks[1:]:
+        await ctx.send(chunk)
 
 
 @bot.command(name="validate_problem")
@@ -1643,14 +1658,15 @@ async def validate_task_cmd(ctx: commands.Context):
             result = await _run_validate_task_request(ctx.message)
         except Exception as e:
             traceback.print_exc()
-            await ctx.reply(
-                _truncate_discord_message(
-                    f"Task validation failed: {type(e).__name__}: {e}"
-                )
-            )
+            err_chunks = _split_discord_message(f"Task validation failed: {type(e).__name__}: {e}")
+            await ctx.reply(err_chunks[0])
+            for chunk in err_chunks[1:]:
+                await ctx.send(chunk)
             return
-
-    await ctx.reply(result)
+    chunks = _split_discord_message(result)
+    await ctx.reply(chunks[0])
+    for chunk in chunks[1:]:
+        await ctx.send(chunk)
 
 
 @bot.command(name="autovalidate")
@@ -1660,12 +1676,15 @@ async def autovalidate_cmd(ctx: commands.Context):
             reply_text, files = await _run_autovalidate_request(ctx.message)
         except Exception as e:
             traceback.print_exc()
-            await ctx.reply(
-                _truncate_discord_message(f"Auto-validate failed: {type(e).__name__}: {e}")
-            )
+            err_chunks = _split_discord_message(f"Auto-validate failed: {type(e).__name__}: {e}")
+            await ctx.reply(err_chunks[0])
+            for chunk in err_chunks[1:]:
+                await ctx.send(chunk)
             return
-
-    await ctx.reply(reply_text, files=files)
+    chunks = _split_discord_message(reply_text)
+    await ctx.reply(chunks[0], files=files)
+    for chunk in chunks[1:]:
+        await ctx.send(chunk)
 
 
 @bot.command(name="paastools")
@@ -1676,11 +1695,10 @@ async def paastools_cmd(ctx: commands.Context):
             paas_tools = tool_catalog.get("paas", [])
         except Exception as e:
             traceback.print_exc()
-            await ctx.reply(
-                _truncate_discord_message(
-                    f"PaaS tool listing failed: {type(e).__name__}: {e}"
-                )
-            )
+            err_chunks = _split_discord_message(f"PaaS tool listing failed: {type(e).__name__}: {e}")
+            await ctx.reply(err_chunks[0])
+            for chunk in err_chunks[1:]:
+                await ctx.send(chunk)
             return
 
     messages = _split_discord_message(
@@ -1698,11 +1716,10 @@ async def tools(ctx: commands.Context):
             tool_map = await list_all_mcp_tools()
         except Exception as e:
             traceback.print_exc()
-            await ctx.reply(
-                _truncate_discord_message(
-                    f"Tool listing failed: {type(e).__name__}: {e}"
-                )
-            )
+            err_chunks = _split_discord_message(f"Tool listing failed: {type(e).__name__}: {e}")
+            await ctx.reply(err_chunks[0])
+            for chunk in err_chunks[1:]:
+                await ctx.send(chunk)
             return
 
     messages = _split_discord_message(_format_mcp_tools_message(tool_map))
