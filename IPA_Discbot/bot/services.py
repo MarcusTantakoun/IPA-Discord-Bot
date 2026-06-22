@@ -69,6 +69,7 @@ from .state import (
     _working_artifacts,
 )
 from .storage import (
+    delete_all_provider_keys,
     get_share_mode,
     get_recent_context,
     get_user_model,
@@ -176,6 +177,7 @@ def _format_help_message() -> str:
         "`/models` Show the available LLM model IDs you can choose from.",
         "`/use <model_id>` Set which model the bot should use for your requests.",
         "`/setkey <provider> <api_key>` Save your provider API key for `openai`, `gemini`, `deepseek`, `anthropic`, `mistral`, or `ollama`.",
+        "`!remove` Remove all your stored API keys from the bot.",
     ]
     return "\n".join(lines)
 
@@ -1160,6 +1162,15 @@ async def setkey_cmd(interaction: discord.Interaction, provider: str, api_key: s
         f"Saved key for {provider}.",
         ephemeral=True,
     )
+
+
+@bot.command(name="remove")
+async def remove_keys_cmd(ctx: commands.Context):
+    deleted = delete_all_provider_keys(str(ctx.author.id))
+    if deleted:
+        await ctx.reply(f"Removed {deleted} API key(s) from your account.", mention_author=False)
+    else:
+        await ctx.reply("You have no stored API keys to remove.", mention_author=False)
 
 
 @bot.event

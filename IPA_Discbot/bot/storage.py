@@ -508,6 +508,16 @@ def save_provider_key(user_id: str, provider: str, api_key: str):
     con.close()
 
 
+def delete_all_provider_keys(user_id: str) -> int:
+    con = _db_connect()
+    cur = con.cursor()
+    cur.execute("DELETE FROM user_provider_keys WHERE user_id = ?", (user_id,))
+    deleted = cur.rowcount
+    con.commit()
+    con.close()
+    return deleted
+
+
 def user_has_any_provider_key(user_id: str) -> bool:
     con = _db_connect()
     cur = con.cursor()
