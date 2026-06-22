@@ -106,6 +106,12 @@ def _split_discord_message(text: str, limit: int = 1900) -> list[str]:
     return chunks
 
 
+def _extract_pddl_define_name(pddl: str, kind: str) -> str:
+    """Return the name from (define (domain|problem <name>) ...), or ''."""
+    m = re.search(rf'\(\s*define\s+\(\s*{kind}\s+([^\s)]+)', pddl, re.IGNORECASE)
+    return m.group(1).strip() if m else ""
+
+
 def _pddl_from_l2p_payload(payload: dict[str, object], *keys: str) -> str:
     for key in keys:
         value = payload.get(key)

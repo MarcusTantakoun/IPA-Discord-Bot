@@ -44,6 +44,7 @@ from .parsing import (
     _detect_artifact_request,
     _extract_domain_attachment,
     _extract_pddl_attachments,
+    _extract_pddl_define_name,
     _extract_val_attachments,
     _extract_validation_payload,
     _normalize_artifact_type,
@@ -291,6 +292,8 @@ async def _run_plan_request(
 
     if message.attachments:
         domain_text, problem_text = await _extract_pddl_attachments(message)
+        domain_name = _extract_pddl_define_name(domain_text, "domain") or domain_name
+        problem_name = _extract_pddl_define_name(problem_text, "problem") or problem_name
         if solver_pref == "automatic":
             actual_solver = await _llm_choose_solver(message, domain_text)
         result = await solve_pddl(domain_text, problem_text, tool_name=actual_solver)
