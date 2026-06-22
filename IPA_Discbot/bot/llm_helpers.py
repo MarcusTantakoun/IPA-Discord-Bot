@@ -75,7 +75,9 @@ def _parse_llm_json_object(text: str) -> dict:
     end = text.rfind("}")
     if start == -1 or end == -1 or end < start:
         raise ValueError("No JSON object found in LLM response.")
-    return json.loads(text[start : end + 1])
+    # strict=False allows literal control characters (e.g. raw newlines inside
+    # PDDL string values) that the LLM sometimes emits instead of \n escapes.
+    return json.loads(text[start : end + 1], strict=False)
 
 
 def _json_repair_system_prompt() -> str:
@@ -250,8 +252,14 @@ def _to_pddl_identifier(value: str, default: str) -> str:
 def _fallback_natural_language_solve_system_prompt() -> str:
     return (
         "Return only valid JSON with keys "
-        "`domain_name`, `problem_name`, `domain_update`, and `task_update`. "
-        "Use `domain_update` and `task_update` in the exact XML-tagged JSON format expected by the planning server."
+        "`domain_name`, `problem_name`, `domain_update`, and `task_update`.\n\n"
+        "The `domain_update` value must be a natural-language description of the domain "
+        "(types, predicates, and actions with preconditions and effects).\n\n"
+        "The `task_update` value must contain XML-tagged JSON blocks exactly as shown:\n"
+        "<objects>{\"objects\": [{\"name\": \"obj1\", \"type\": \"type1\"}]}</objects>\n"
+        "<initial>{\"initial\": [{\"predicate\": \"pred\", \"params\": [\"obj1\"]}]}</initial>\n"
+        "<goal>{\"goal\": {\"and\": [{\"predicate\": \"pred\", \"params\": [\"obj1\"]}]}}</goal>\n\n"
+        "Include all three sections. Do not include markdown outside the JSON object."
     )
 
 
