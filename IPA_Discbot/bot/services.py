@@ -89,6 +89,9 @@ from .storage import (
 )
 
 
+_PDDL_KEYWORD_NAMES = {"domain", "problem", "define", "and", "or", "not", "when", "forall", "exists"}
+
+
 def _summarize_tool_description(description: str, limit: int = 80) -> str:
     summary = " ".join((description or "").split())
     if not summary:
@@ -712,7 +715,9 @@ async def _run_edit_domain_request(message: discord.Message, instruction: str) -
         raise RuntimeError("No current domain to edit. Generate or plan something first.")
 
     retry_feedback: str | None = None
-    domain_name = str(current.get("domain_name", "domain")).strip() or "domain"
+    domain_name = str(current.get("domain_name", "")).strip()
+    if not domain_name or domain_name in _PDDL_KEYWORD_NAMES:
+        domain_name = _extract_pddl_define_name(current_domain, "domain") or "unnamed-domain"
     for _ in range(2):
         edit = await _llm_domain_pddl_edit_from_instruction(
             message,
@@ -747,8 +752,12 @@ async def _run_edit_problem_request(message: discord.Message, instruction: str) 
         raise RuntimeError("No current problem to edit. Generate or plan something first.")
 
     retry_feedback: str | None = None
-    domain_name = str(current.get("domain_name", "domain")).strip() or "domain"
-    problem_name = str(current.get("problem_name", "problem")).strip() or "problem"
+    domain_name = str(current.get("domain_name", "")).strip()
+    if not domain_name or domain_name in _PDDL_KEYWORD_NAMES:
+        domain_name = _extract_pddl_define_name(current_domain, "domain") or "unnamed-domain"
+    problem_name = str(current.get("problem_name", "")).strip()
+    if not problem_name or problem_name in _PDDL_KEYWORD_NAMES:
+        problem_name = _extract_pddl_define_name(current_problem, "problem") or "unnamed-problem"
     for _ in range(2):
         edit = await _llm_problem_pddl_edit_from_instruction(
             message,
