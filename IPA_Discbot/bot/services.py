@@ -180,6 +180,7 @@ def _format_help_message() -> str:
         "`/setkey <provider> <api_key>` Save your provider API key for `openai`, `gemini`, `deepseek`, `anthropic`, `mistral`, or `ollama`.",
         "`!remove` Remove all your stored API keys from the bot.",
         "`!clear` Wipe your conversation history (or the whole channel's history if collab mode is on).",
+        "`!clear channel` Same as `!clear` but also bulk-deletes all Discord messages in the channel (requires Manage Messages permission).",
     ]
     return "\n".join(lines)
 
@@ -1167,7 +1168,7 @@ async def setkey_cmd(interaction: discord.Interaction, provider: str, api_key: s
 
 
 @bot.command(name="clear")
-async def clear_cmd(ctx: commands.Context):
+async def clear_cmd(ctx: commands.Context, scope: str | None = None):
     collab_enabled = is_collab_enabled(str(ctx.channel.id))
     deleted = clear_context(
         channel_id=ctx.channel.id,
@@ -1175,11 +1176,23 @@ async def clear_cmd(ctx: commands.Context):
         guild_id=ctx.guild.id if ctx.guild else None,
         shared=collab_enabled,
     )
-    scope = "channel" if collab_enabled else "your"
-    if deleted:
-        await ctx.reply(f"Cleared {deleted} message(s) from {scope} conversation history.", mention_author=False)
+    context_scope = "channel" if collab_enabled else "your"
+    db_msg = (
+        f"Cleared {deleted} message(s) from {context_scope} conversation history."
+        if deleted else "No conversation history found to clear."
+    )
+
+    if scope and scope.lower() == "channel":
+        try:
+            purged = await ctx.channel.purge(limit=None)
+            await ctx.channel.send(f"{db_msg}\nDeleted {len(purged)} Discord message(s) from this channel.")
+        except discord.Forbidden:
+            await ctx.reply(
+                f"{db_msg}\nCould not purge channel — bot needs the Manage Messages permission.",
+                mention_author=False,
+            )
     else:
-        await ctx.reply(f"No conversation history found to clear.", mention_author=False)
+        await ctx.reply(db_msg, mention_author=False)
 
 
 @bot.command(name="remove")
