@@ -1598,7 +1598,11 @@ async def audit_cmd(ctx: commands.Context):
             )
             return
 
-    await ctx.reply(_truncate_discord_message(f"Domain audit:\n```text\n{result}\n```"))
+    reply_text = f"Domain audit:\n```text\n{result}\n```"
+    chunks = _split_discord_message(reply_text)
+    await ctx.reply(chunks[0])
+    for chunk in chunks[1:]:
+        await ctx.send(chunk)
 
 
 @bot.command(name="validate_plan")
