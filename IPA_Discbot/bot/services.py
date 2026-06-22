@@ -1184,8 +1184,9 @@ async def clear_cmd(ctx: commands.Context, scope: str | None = None):
 
     if scope and scope.lower() == "channel":
         try:
+            await ctx.channel.send("Purging channel messages…")
             purged = await ctx.channel.purge(limit=None)
-            await ctx.channel.send(f"{db_msg}\nDeleted {len(purged)} Discord message(s) from this channel.")
+            await ctx.channel.send(f"Done. {db_msg}\nDeleted {len(purged)} Discord message(s) from this channel.")
         except discord.Forbidden:
             await ctx.reply(
                 f"{db_msg}\nCould not purge channel — bot needs the Manage Messages permission.",
