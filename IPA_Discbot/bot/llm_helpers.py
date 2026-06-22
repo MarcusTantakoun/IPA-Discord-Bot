@@ -292,10 +292,13 @@ async def _natural_language_solve_system_prompt() -> str:
     )
 
 
-def _llm_reply_sync(model_id: str, context_messages: list[dict]) -> str:
+def _llm_reply_sync(model_id: str, context_messages: list[dict], artifact_context: str = "") -> str:
     transcript = _build_transcript(context_messages)
+    system = _conversation_system_prompt()
+    if artifact_context:
+        system += f"\n\n{artifact_context}"
     model = llm.get_model(model_id)
-    response = model.prompt(transcript, system=_conversation_system_prompt())
+    response = model.prompt(transcript, system=system)
     return response.text().strip()
 
 
@@ -359,13 +362,15 @@ def _run_llm_prompt_for_user_sync(
 
 
 def _run_llm_for_user_sync(
-    user_id: str, model_id: str, context_messages: list[dict]
+    user_id: str, model_id: str, context_messages: list[dict], artifact_context: str = ""
 ) -> str:
     provider = _provider_from_model_id(model_id)
     env_key = PROVIDER_ENV.get(provider or "")
 
     transcript = _build_transcript(context_messages)
     system_prompt = _conversation_system_prompt()
+    if artifact_context:
+        system_prompt += f"\n\n{artifact_context}"
 
     user_key = None
     if env_key:
@@ -394,7 +399,8 @@ def _run_llm_for_user_sync(
 
 
 async def llm_reply(
-    model_id: str, context_messages: list[dict], user_id: str | None = None
+    model_id: str, context_messages: list[dict], user_id: str | None = None,
+    artifact_context: str = "",
 ) -> str:
     print("========== MODEL DEBUG ==========")
     print("User ID:", user_id)
@@ -404,9 +410,9 @@ async def llm_reply(
     print("=================================")
 
     if user_id is None:
-        return await asyncio.to_thread(_llm_reply_sync, model_id, context_messages)
+        return await asyncio.to_thread(_llm_reply_sync, model_id, context_messages, artifact_context)
     return await asyncio.to_thread(
-        _run_llm_for_user_sync, user_id, model_id, context_messages
+        _run_llm_for_user_sync, user_id, model_id, context_messages, artifact_context
     )
 
 

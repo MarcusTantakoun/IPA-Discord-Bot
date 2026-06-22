@@ -1202,10 +1202,33 @@ async def _handle_conversation_message(message: discord.Message):
             channel_id=message.channel.id,
             shared=collab_enabled,
         )
+
+        # Build artifact context so the LLM knows what domain/problem/plan is
+        # currently active — prevents it from hallucinating based on old history.
+        current = _working_artifacts(message)
+        domain_text = _artifact_text(current, "domain")
+        problem_text = _artifact_text(current, "problem")
+        plan_text = _artifact_text(current, "plan")
+        artifact_parts: list[str] = []
+        if domain_text:
+            artifact_parts.append(f"[Current domain]\n```\n{domain_text.strip()}\n```")
+        if problem_text:
+            artifact_parts.append(f"[Current problem]\n```\n{problem_text.strip()}\n```")
+        if plan_text:
+            plan_tail = "\n".join(plan_text.strip().splitlines()[-30:])
+            artifact_parts.append(f"[Current plan output (last 30 lines)]\n```\n{plan_tail}\n```")
+        artifact_context = (
+            "The user's currently loaded PDDL artifacts are shown below. "
+            "When they refer to 'the domain', 'the problem', 'that plan', or similar, use these.\n\n"
+            + "\n\n".join(artifact_parts)
+            if artifact_parts else ""
+        )
+
         selected_model = get_user_model(str(message.author.id)) or MODEL
         try:
             answer = await llm_reply(
-                selected_model, context, user_id=str(message.author.id)
+                selected_model, context, user_id=str(message.author.id),
+                artifact_context=artifact_context,
             )
         except Exception as e:
             print("[LLM ERROR]", type(e).__name__, e)
