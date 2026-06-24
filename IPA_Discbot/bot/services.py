@@ -20,18 +20,18 @@ from IPA_Discbot.mcp_client import (
 )
 from IPA_Discbot.mcp_client.config import PAAS_SOLVER_TOOLS
 
+from l2p.utils.pddl_parser import parse_domain_pddl, parse_problem_pddl
+
 from .llm_helpers import (
     _all_llm_model_ids,
     _llm_audit_domain,
     _llm_check_goal_reachability,
     _llm_choose_solver,
-    _llm_domain_pddl_edit_from_instruction,
     _llm_domain_edit_from_instruction,
     _llm_explain_artifact,
     _llm_classify_confirmation_reply,
     _llm_classify_member_request,
     _llm_plan_edit_from_instruction,
-    _llm_problem_pddl_edit_from_instruction,
     _llm_plan_from_natural_language,
     _llm_problem_edit_from_instruction,
     _parse_solve_response_text,
@@ -723,7 +723,7 @@ async def _run_edit_domain_request(message: discord.Message, instruction: str) -
     if not domain_name or domain_name in _PDDL_KEYWORD_NAMES:
         domain_name = _extract_pddl_define_name(current_domain, "domain") or "unnamed-domain"
     for _ in range(2):
-        edit = await _llm_domain_pddl_edit_from_instruction(
+        edit = await _llm_domain_edit_from_instruction(
             message,
             instruction,
             current_domain,
@@ -731,9 +731,27 @@ async def _run_edit_domain_request(message: discord.Message, instruction: str) -
             retry_feedback,
         )
         domain_name = str(edit.get("domain_name", domain_name)).strip() or domain_name
-        domain_text = str(edit.get("domain_pddl", "")).strip()
+        domain_update = str(edit.get("domain_update", "")).strip()
+        if not domain_update:
+            raise RuntimeError("Failed to generate domain update.")
+
+        try:
+            current_domain_dict = parse_domain_pddl(current_domain).model_dump()
+            domain_payload = await update_domain_via_l2p(
+                domain_update=domain_update,
+                domain=current_domain_dict,
+                domain_name=domain_name,
+            )
+        except RuntimeError as e:
+            retry_feedback = str(e)
+            continue
+
+        domain_text = _pddl_from_l2p_payload(
+            domain_payload, "domain_pddl", "domain", "pddl",
+        )
         if not domain_text:
             raise RuntimeError("Failed to generate revised domain PDDL.")
+
         validation_result = await validate_domain(domain_text)
         if not _validation_indicates_valid("domain", validation_result):
             retry_feedback = _format_validation_result("domain", validation_result)
@@ -763,10 +781,9 @@ async def _run_edit_problem_request(message: discord.Message, instruction: str) 
     if not problem_name or problem_name in _PDDL_KEYWORD_NAMES:
         problem_name = _extract_pddl_define_name(current_problem, "problem") or "unnamed-problem"
     for _ in range(2):
-        edit = await _llm_problem_pddl_edit_from_instruction(
+        edit = await _llm_problem_edit_from_instruction(
             message,
             instruction,
-            current_domain,
             current_problem,
             domain_name,
             problem_name,
@@ -774,9 +791,28 @@ async def _run_edit_problem_request(message: discord.Message, instruction: str) 
         )
         domain_name = str(edit.get("domain_name", domain_name)).strip() or domain_name
         problem_name = str(edit.get("problem_name", problem_name)).strip() or problem_name
-        problem_text = str(edit.get("problem_pddl", "")).strip()
+        task_update = str(edit.get("task_update", "")).strip()
+        if not task_update:
+            raise RuntimeError("Failed to generate problem update.")
+
+        try:
+            current_problem_dict = parse_problem_pddl(current_problem).model_dump()
+            task_payload = await update_task_via_l2p(
+                task_update=task_update,
+                task=current_problem_dict,
+                domain_name=domain_name,
+                problem_name=problem_name,
+            )
+        except RuntimeError as e:
+            retry_feedback = str(e)
+            continue
+
+        problem_text = _pddl_from_l2p_payload(
+            task_payload, "task_pddl", "problem_pddl", "problem", "task", "pddl",
+        )
         if not problem_text:
             raise RuntimeError("Failed to generate revised problem PDDL.")
+
         validation_result = await validate_task(current_domain, problem_text)
         if not _validation_indicates_valid("task", validation_result):
             retry_feedback = _format_validation_result("task", validation_result)
